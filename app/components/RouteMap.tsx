@@ -187,14 +187,19 @@ export default function RouteMap({
   useEffect(() => {
     if (!sdkReady || !mapDivRef.current || mapRef.current) return;
     mapRef.current = new window.google.maps.Map(mapDivRef.current, {
-      center: { lat: (origin.lat + destination.lat) / 2, lng: (origin.lon + destination.lon) / 2 },
-      zoom: 9,
-      styles: isDark ? DARK_STYLE : LIGHT_STYLE,
-      disableDefaultUI: true,
-      zoomControl: true,
-      zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
-      gestureHandling: "cooperative",
-    });
+  center: {
+    lat: (origin.lat + destination.lat) / 2,
+    lng: (origin.lon + destination.lon) / 2,
+  },
+  zoom: 9,
+  styles: isDark ? DARK_STYLE : LIGHT_STYLE,
+  disableDefaultUI: true,
+  zoomControl: true,
+  zoomControlOptions: {
+    position: window.google.maps.ControlPosition.TOP_RIGHT,
+  },
+  gestureHandling: "cooperative",
+});
   }, [sdkReady, origin, destination, isDark]);
 
   /* ── Re-apply style when theme switches ─────────────────────────────── */
@@ -355,7 +360,7 @@ export default function RouteMap({
           style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
           <BatArc pct={batteryPercent} label="Start" color="#60a5fa" isDark={isDark} />
           <span className="text-xs" style={{ color: textMuted }}>→</span>
-          <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} isDark={isDark} />
+          <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} isDark={isDark} notFeasible={!willReach} />
         </div>
       )}
 
@@ -447,7 +452,7 @@ export default function RouteMap({
   );
 }
 
-function BatArc({ pct, label, color, isDark }: { pct: number; label: string; color: string; isDark: boolean }) {
+function BatArc({ pct, label, color, isDark, notFeasible }: { pct: number; label: string; color: string; isDark: boolean; notFeasible?: boolean }) {
   const r = 17, circ = 2 * Math.PI * r, fill = (pct / 100) * circ;
   const textMuted = isDark ? "rgba(160,210,180,0.7)" : "#6b7280";
   return (
@@ -460,10 +465,19 @@ function BatArc({ pct, label, color, isDark }: { pct: number; label: string; col
             strokeLinecap="round" style={{ transition: "stroke-dasharray 1s ease" }} />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-syne font-extrabold text-[11px]" style={{ color }}>{pct.toFixed(0)}%</span>
+          {notFeasible ? (
+            /* ✕ cross badge — shown when battery can't make it */
+            <div className="flex flex-col items-center justify-center gap-0.5">
+              <span style={{ color, fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✕</span>
+            </div>
+          ) : (
+            <span className="font-syne font-extrabold text-[11px]" style={{ color }}>{pct.toFixed(0)}%</span>
+          )}
         </div>
       </div>
-      <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: textMuted }}>{label}</span>
+      <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: notFeasible ? "#f87171" : textMuted }}>
+        {notFeasible ? "No range" : label}
+      </span>
     </div>
   );
 }
