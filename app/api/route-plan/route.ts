@@ -15,18 +15,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not geocode one or both locations." }, { status: 400 });
   }
 
-  // ── 2. Get driving route from OpenRouteService ────────────────────────────
+  // ── 2. Get driving route ──────────────────────────────────────────────────
   const orsRes = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/json", {
     method: "POST",
-    headers: {
-      "Authorization": process.env.ORS_API_KEY!,
-      "Content-Type":  "application/json",
-    },
+    headers: { "Authorization": process.env.ORS_API_KEY!, "Content-Type": "application/json" },
     body: JSON.stringify({
-      coordinates: [
-        [originGeo.lon, originGeo.lat],
-        [destGeo.lon,   destGeo.lat],
-      ],
+      coordinates: [[originGeo.lon, originGeo.lat], [destGeo.lon, destGeo.lat]],
       elevation: true,
     }),
   });
@@ -36,174 +30,163 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Route not found between these locations." }, { status: 400 });
   }
 
-  const segment     = routeData.routes[0].segments[0];
-  const distanceKm  = segment.distance / 1000;
-  const durationMin = segment.duration / 60;
+  const segment       = routeData.routes[0].segments[0];
+  const distanceKm    = segment.distance / 1000;
+  const durationMin   = segment.duration / 60;
   const elevationGain = routeData.routes[0].ascent || 0;
 
-  // ── 3. Get weather at route midpoint ─────────────────────────────────────
+  // ── 3. Weather at midpoint ────────────────────────────────────────────────
   const midLat = (originGeo.lat + destGeo.lat) / 2;
   const midLon = (originGeo.lon + destGeo.lon) / 2;
+  const weatherData = await fetch(`${BASE}/api/weather?lat=${midLat}&lon=${midLon}`).then(r => r.json());
 
-  const weatherData = await fetch(
-    `${BASE}/api/weather?lat=${midLat}&lon=${midLon}`
-  ).then(r => r.json());
-
-  // ── 4. Predict battery ────────────────────────────────────────────────────
+  // ── 4. Battery prediction ────────────────────────────────────────────────
   const prediction = await fetch(`${BASE}/api/battery-predict`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      distanceKm,
-      batteryPercent,
-      vehicleRangeKm,
-      weatherFactor:  weatherData.weatherFactor,
+      distanceKm, batteryPercent, vehicleRangeKm,
+      weatherFactor: weatherData.weatherFactor,
       elevationGainM: elevationGain,
     }),
   }).then(r => r.json());
 
-  // ── 5. Always fetch nearby charging stations (for map display) ────────────
-  // Fetch along the route: try 1/3 and 2/3 points for better coverage
-  const oneThirdLat = originGeo.lat + (destGeo.lat - originGeo.lat) / 3;
-  const oneThirdLon = originGeo.lon + (destGeo.lon - originGeo.lon) / 3;
-  const twoThirdsLat = originGeo.lat + 2 * (destGeo.lat - originGeo.lat) / 3;
-  const twoThirdsLon = originGeo.lon + 2 * (destGeo.lon - originGeo.lon) / 3;
+  // ── 5. Sample 5 evenly-spaced points along the route ────────────────────
+  // Fetch stations at each point in parallel
+  const consumptionRatePerKm = prediction.totalBatteryUsed / distanceKm; // %/km
+  const sampleFractions = [0.2, 0.35, 0.5, 0.65, 0.8];
+  const addressHint = `${origin} to ${destination}`;
 
-  // Pick the best midpoint based on whether charge is needed
-  const stationQueryLat = prediction.willReachDestination ? midLat : oneThirdLat;
-  const stationQueryLon = prediction.willReachDestination ? midLon : oneThirdLon;
-  const addressHint     = `${origin} to ${destination}`;
+  const stationFetches = sampleFractions.map(frac => {
+    const lat = originGeo.lat + (destGeo.lat - originGeo.lat) * frac;
+    const lon = originGeo.lon + (destGeo.lon - originGeo.lon) * frac;
+    const kmHere = distanceKm * frac;
+    const batteryHere = batteryPercent - consumptionRatePerKm * kmHere;
 
-  const [midStations, altStations] = await Promise.all([
-    fetch(
-      `${BASE}/api/charging-stations?lat=${stationQueryLat}&lon=${stationQueryLon}&radius=20000&address=${encodeURIComponent(addressHint)}`
-    ).then(r => r.json()),
-    // Also fetch near 2/3 point if charge is needed
-    !prediction.willReachDestination
-      ? fetch(
-          `${BASE}/api/charging-stations?lat=${twoThirdsLat}&lon=${twoThirdsLon}&radius=20000&address=${encodeURIComponent(addressHint)}`
-        ).then(r => r.json())
-      : Promise.resolve({ stations: [] }),
-  ]);
+    return fetch(
+      `${BASE}/api/charging-stations?lat=${lat}&lon=${lon}&radius=15000&address=${encodeURIComponent(addressHint)}`
+    )
+      .then(r => r.json())
+      .then(data => ({ stations: (data.stations || []) as any[], frac, batteryHere, kmHere }))
+      .catch(() => ({ stations: [], frac, batteryHere, kmHere }));
+  });
 
-  // Merge and deduplicate stations from both fetch points
-  const allStations = [...(midStations.stations || [])];
-  const existingIds = new Set(allStations.map((s: any) => s.id));
-  for (const s of (altStations.stations || [])) {
-    if (!existingIds.has(s.id)) {
-      allStations.push(s);
-      existingIds.add(s.id);
+  const stationResults = await Promise.all(stationFetches);
+
+  // ── 6. Merge + deduplicate + annotate isNeeded / isCritical ─────────────
+  const seen = new Set<string>();
+  const allAnnotated: any[] = [];
+
+  // The km at which battery runs out (without charging)
+  const rangeRunsOutAtKm = (batteryPercent / 100) * vehicleRangeKm * weatherData.weatherFactor;
+
+  for (const result of stationResults) {
+    for (const s of result.stations) {
+      // Deduplicate by proximity
+      const key = `${Math.round(s.lat * 100)}_${Math.round(s.lon * 100)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const batteryHere = result.batteryHere;
+      const kmHere      = result.kmHere;
+
+      // NEEDED: battery will be critically low at this point AND there's still charge to drive here
+      const willBeStranded = !prediction.willReachDestination && kmHere <= rangeRunsOutAtKm;
+      const batteryLow     = batteryHere < 25 && batteryHere > 5;
+
+      const isNeeded   = (willBeStranded && batteryHere > 5) || (batteryLow && !prediction.willReachDestination);
+      const isCritical = isNeeded && batteryHere < 20 && batteryHere > 5;
+
+      allAnnotated.push({
+        ...s,
+        routeFraction:  result.frac,
+        batteryAtPoint: Math.round(batteryHere * 10) / 10,
+        isNeeded,
+        isCritical,
+      });
     }
   }
-  const chargingStations = allStations.slice(0, 6);
 
-  // ── 6. OpenRouter AI: Smart insights & suggestions ────────────────────────
+  // Sort: critical → needed → informational, then by route order within each group
+  allAnnotated.sort((a, b) => {
+    const rankA = a.isCritical ? 0 : a.isNeeded ? 1 : 2;
+    const rankB = b.isCritical ? 0 : b.isNeeded ? 1 : 2;
+    if (rankA !== rankB) return rankA - rankB;
+    return a.routeFraction - b.routeFraction;
+  });
+
+  // Keep all needed/critical + up to 8 informational (to limit map clutter)
+  const needed     = allAnnotated.filter(s => s.isNeeded);
+  const optional   = allAnnotated.filter(s => !s.isNeeded).slice(0, Math.max(2, 10 - needed.length));
+  const chargingStations = [...needed, ...optional];
+
+  // ── 7. OpenRouter AI insights ────────────────────────────────────────────
   let aiInsights = getDefaultInsights(prediction, weatherData, distanceKm, batteryPercent);
-
   const openRouterKey = process.env.OPENROUTER_API_KEY;
+
   if (openRouterKey) {
     try {
-      const prompt = buildInsightPrompt({
-        origin, destination, distanceKm, durationMin, batteryPercent,
-        vehicleRangeKm, elevationGain, weatherData, prediction, chargingStations,
-      });
-
       const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${openRouterKey}`,
           "Content-Type":  "application/json",
-          "HTTP-Referer":  process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000",
+          "HTTP-Referer":  BASE,
           "X-Title":       "EV Range Predictor",
         },
         body: JSON.stringify({
           model: "anthropic/claude-3-haiku",
           max_tokens: 600,
           messages: [
-            {
-              role: "system",
-              content: "You are an expert EV trip analyst. Respond ONLY with a valid JSON object — no markdown, no explanation, no preamble.",
-            },
-            { role: "user", content: prompt },
+            { role: "system", content: "You are an expert EV trip analyst. Respond ONLY with valid JSON, no markdown." },
+            { role: "user",   content: buildInsightPrompt({ origin, destination, distanceKm, durationMin, batteryPercent, vehicleRangeKm, elevationGain, weatherData, prediction, chargingStations }) },
           ],
         }),
       });
 
       if (aiRes.ok) {
         const aiData = await aiRes.json();
-        const raw = aiData.choices?.[0]?.message?.content || "";
-        // Strip any accidental markdown fences
-        const cleaned = raw.replace(/```json|```/g, "").trim();
-        const parsed  = JSON.parse(cleaned);
-        aiInsights = parsed;
+        const raw    = aiData.choices?.[0]?.message?.content || "";
+        aiInsights   = JSON.parse(raw.replace(/```json|```/g, "").trim());
       }
-    } catch (err) {
-      console.error("OpenRouter AI error:", err);
-      // Keep default insights
-    }
+    } catch (err) { console.error("OpenRouter error:", err); }
   }
 
-  // ── 7. Return combined result ─────────────────────────────────────────────
   return NextResponse.json({
-    origin:           originGeo,
-    destination:      destGeo,
+    origin: originGeo, destination: destGeo,
     route: {
       distanceKm:     Math.round(distanceKm),
       durationMin:    Math.round(durationMin),
       elevationGainM: Math.round(elevationGain),
     },
-    weather:          weatherData,
-    battery:          prediction,
-    chargingStations,
-    aiInsights,
+    weather: weatherData, battery: prediction, chargingStations, aiInsights,
   });
 }
 
-// ── AI prompt builder ──────────────────────────────────────────────────────
+function buildInsightPrompt(ctx: any) {
+  const neededCount = ctx.chargingStations.filter((s: any) => s.isNeeded).length;
+  return `Analyse this EV trip and return ONLY this JSON:
+{"summary":"2-sentence summary","verdict":"go"|"charge_first"|"charge_enroute","tips":["tip1","tip2","tip3"],"optimalSpeed":number,"chargingAdvice":"1 sentence","riskLevel":"low"|"medium"|"high"}
 
-function buildInsightPrompt(ctx: any): string {
-  return `
-Analyse this EV trip and respond with a JSON object matching exactly this schema:
-{
-  "summary": "2-sentence trip summary mentioning key factors",
-  "verdict": "go" | "charge_first" | "charge_enroute",
-  "tips": ["tip1", "tip2", "tip3"],
-  "optimalSpeed": number,  // recommended speed in km/h for max range
-  "chargingAdvice": "1-sentence charging recommendation",
-  "riskLevel": "low" | "medium" | "high"
+Route: ${ctx.origin} → ${ctx.destination}, ${Math.round(ctx.distanceKm)}km, ${Math.round(ctx.durationMin)}min
+Battery: ${ctx.batteryPercent}% start, ${ctx.prediction.remainingBattery}% remaining, reach=${ctx.prediction.willReachDestination}
+Weather: ${ctx.weatherData.conditions} ${ctx.weatherData.temperature}°C wind=${ctx.weatherData.wind_speed}km/h efficiency=${Math.round(ctx.weatherData.weatherFactor*100)}%
+Elevation: +${Math.round(ctx.elevationGain)}m
+Chargers: ${ctx.chargingStations.length} found, ${neededCount} recommended stops`;
 }
-
-Trip data:
-- Route: ${ctx.origin} → ${ctx.destination}
-- Distance: ${Math.round(ctx.distanceKm)} km, ETA: ${Math.round(ctx.durationMin)} min
-- Current battery: ${ctx.batteryPercent}% of ${ctx.vehicleRangeKm}km range vehicle
-- Remaining after trip: ${ctx.prediction.remainingBattery}%
-- Will reach destination: ${ctx.prediction.willReachDestination}
-- Weather: ${ctx.weatherData.conditions}, ${ctx.weatherData.temperature}°C, wind ${ctx.weatherData.wind_speed}km/h, rain ${ctx.weatherData.precipitation}mm
-- Weather efficiency factor: ${Math.round(ctx.weatherData.weatherFactor * 100)}%
-- Elevation gain: ${Math.round(ctx.elevationGain)}m
-- Nearby chargers found: ${ctx.chargingStations.length} (${ctx.chargingStations.filter((s: any) => s.fastCharge).length} fast chargers)
-- Battery breakdowns: ${JSON.stringify(ctx.prediction.breakdowns)}
-
-Return ONLY the JSON object. No markdown, no explanation.`.trim();
-}
-
-// ── Default fallback insights (no OpenRouter key) ─────────────────────────
 
 function getDefaultInsights(prediction: any, weather: any, distanceKm: number, battery: number) {
   const ok = prediction.willReachDestination;
   return {
     summary: ok
-      ? `Your EV can complete this ${Math.round(distanceKm)}km trip comfortably with ${prediction.remainingBattery.toFixed(0)}% battery to spare. Current weather conditions have ${Math.round((1 - weather.weatherFactor) * 100)}% impact on range.`
-      : `This ${Math.round(distanceKm)}km trip requires a charging stop — you'd arrive ${Math.abs(prediction.remainingBattery).toFixed(0)}% short. Plan a charge break along the route.`,
-    verdict:        ok ? "go" : "charge_enroute",
+      ? `Your EV completes this ${Math.round(distanceKm)}km trip with ${prediction.remainingBattery.toFixed(0)}% remaining. Weather reduces range by ${Math.round((1-weather.weatherFactor)*100)}%.`
+      : `This ${Math.round(distanceKm)}km trip needs a charge stop — you'd be ${Math.abs(prediction.remainingBattery).toFixed(0)}% short. Use a highlighted charger on the map.`,
+    verdict: ok ? "go" : "charge_enroute",
     tips: ok
-      ? ["Maintain 80-100 km/h for optimal efficiency", "Pre-condition your cabin while plugged in", "Use regenerative braking on descents"]
-      : ["Charge to at least 80% before departing", "Use the nearest fast charger along the route", "Reduce speed to 80 km/h to stretch your range"],
-    optimalSpeed:     90,
-    chargingAdvice:  ok
-      ? `No charging needed. You'll arrive with a ${prediction.safetyBuffer}% buffer.`
-      : "Stop at a fast charger at the midpoint and top up to 80%.",
+      ? ["Maintain 80-100 km/h for optimal efficiency","Pre-condition cabin while still plugged in","Use regenerative braking on descents"]
+      : ["Stop at a red/amber charger pin on the map","Aim to top up to 80% at the stop","Drive at 80 km/h to stretch remaining range"],
+    optimalSpeed: 90,
+    chargingAdvice: ok ? `No stop needed — ${prediction.safetyBuffer}% safety buffer.` : "Stop at the nearest highlighted charger before battery drops below 15%.",
     riskLevel: prediction.remainingBattery > 20 ? "low" : prediction.remainingBattery > 0 ? "medium" : "high",
   };
 }
