@@ -1,6 +1,18 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { getBatteryColor, getBatteryStatus } from "../lib/routeUtils";
+
+function getBatteryColor(p: number) {
+  if (p > 50) return "#16a34a";
+  if (p > 25) return "#d97706";
+  return "#dc2626";
+}
+function getBatteryStatus(p: number) {
+  if (p > 80) return "Excellent";
+  if (p > 50) return "Good";
+  if (p > 25) return "Low";
+  if (p > 10) return "Critical";
+  return "Empty";
+}
 
 interface Props {
   before: number;
@@ -24,7 +36,7 @@ export default function BatteryGauge({ before, after, used, willReach, safetyBuf
 
     const W = canvas.width, H = canvas.height;
     const cx = W / 2, cy = H / 2;
-    const R = Math.min(cx, cy) - 12;
+    const R = Math.min(cx, cy) - 14;
     const start = Math.PI * 0.75, end = Math.PI * 2.25;
     const range = end - start;
 
@@ -32,79 +44,65 @@ export default function BatteryGauge({ before, after, used, willReach, safetyBuf
 
     // Track
     ctx.beginPath(); ctx.arc(cx, cy, R, start, end);
-    ctx.strokeStyle = "#1e2a1e"; ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,0.08)";
+    ctx.lineWidth = 14; ctx.lineCap = "round"; ctx.stroke();
 
-    // Before dim arc
+    // Before dim
     const beforeAngle = start + (before / 100) * range;
     ctx.beginPath(); ctx.arc(cx, cy, R, start, beforeAngle);
-    ctx.strokeStyle = "#1e3a1e"; ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,0.06)";
+    ctx.lineWidth = 14; ctx.lineCap = "round"; ctx.stroke();
 
-    // After colored arc
+    // After arc
     if (afterClamped > 0) {
       const afterAngle = start + (afterClamped / 100) * range;
       const grad = ctx.createLinearGradient(cx - R, cy, cx + R, cy);
       grad.addColorStop(0, afterColor); grad.addColorStop(1, beforeColor);
       ctx.beginPath(); ctx.arc(cx, cy, R, start, afterAngle);
-      ctx.strokeStyle = grad; ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.stroke();
+      ctx.strokeStyle = grad; ctx.lineWidth = 14; ctx.lineCap = "round"; ctx.stroke();
     }
 
-    // Used zone (red fade)
+    // Used zone
     if (used > 0 && afterClamped < before) {
       const aA = start + (afterClamped / 100) * range;
       const bA = start + (before / 100) * range;
       ctx.beginPath(); ctx.arc(cx, cy, R, aA, bA);
-      ctx.strokeStyle = "rgba(239,68,68,0.3)"; ctx.lineWidth = 16; ctx.lineCap = "round"; ctx.stroke();
+      ctx.strokeStyle = "rgba(220,38,38,0.2)";
+      ctx.lineWidth = 14; ctx.lineCap = "round"; ctx.stroke();
     }
   }, [before, afterClamped, used, beforeColor, afterColor]);
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* Canvas gauge */}
-      <div className="relative w-[220px] h-[220px]">
-        <canvas ref={canvasRef} width={220} height={220} className="block" />
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 pt-5">
-          <span className="font-syne font-extrabold text-5xl leading-none transition-colors duration-500" style={{ color: afterColor }}>
-            {afterClamped.toFixed(1)}%
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-            remaining
-          </span>
-          <span className="font-syne font-semibold text-sm mt-0.5" style={{ color: afterColor }}>
-            {getBatteryStatus(afterClamped)}
-          </span>
+      <div className="relative w-[200px] h-[200px]">
+        <canvas ref={canvasRef} width={200} height={200} />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 pt-4">
+          <span className="text-4xl font-bold transition-colors duration-500" style={{ color: afterColor }}>{afterClamped.toFixed(1)}%</span>
+          <span className="text-[10px] uppercase tracking-widest text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>remaining</span>
+          <span className="text-sm font-semibold mt-0.5" style={{ color: afterColor }}>{getBatteryStatus(afterClamped)}</span>
         </div>
       </div>
 
-      {/* Stats row */}
-      <div
-        className="flex items-center w-full rounded-xl overflow-hidden"
-        style={{ background: "var(--input-bg)", border: "1px solid var(--border)" }}
-      >
+      <div className="flex w-full rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface2)]">
         {[
-          { val: `${before}%`,         key: "Started",  color: "#60a5fa" },
-          { val: `${used.toFixed(1)}%`,key: "Used",     color: "#f87171" },
-          { val: `${safetyBuffer}%`,   key: "Buffer",   color: "#4ade80" },
+          { val: `${before}%`,           key: "Started",   color: "#3b82f6" },
+          { val: `${used.toFixed(1)}%`,  key: "Used",      color: "#ef4444" },
+          { val: `${safetyBuffer}%`,     key: "Buffer",    color: "#16a34a" },
         ].map((s, i) => (
-          <div key={s.key} className="flex-1 flex flex-col items-center py-3 px-2 gap-0.5 relative">
-            {i > 0 && (
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-10" style={{ background: "var(--border)" }} />
-            )}
-            <span className="font-syne font-bold text-base" style={{ color: s.color }}>{s.val}</span>
-            <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>{s.key}</span>
+          <div key={s.key} className="flex-1 flex flex-col items-center py-3 gap-0.5 relative">
+            {i > 0 && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-8 bg-[var(--border)]" />}
+            <span className="font-bold text-sm" style={{ color: s.color }}>{s.val}</span>
+            <span className="text-[9px] uppercase tracking-wider text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>{s.key}</span>
           </div>
         ))}
       </div>
 
-      {/* Reach badge */}
-      <div
-        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-syne font-semibold text-sm"
-        style={{
-          background: willReach ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
-          border: `1px solid ${willReach ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-          color: willReach ? "#4ade80" : "#f87171",
-        }}
-      >
-        {willReach ? <><span>✓</span> Will reach destination</> : <><span>✗</span> Charging stop needed</>}
+      <div className={`w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold border ${
+        willReach
+          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-400"
+          : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400"
+      }`}>
+        {willReach ? "✓ Will reach destination" : "✗ Charging stop needed"}
       </div>
     </div>
   );

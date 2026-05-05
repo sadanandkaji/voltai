@@ -1,58 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { RouteFormData, RoutePlanResult } from "./lib/types";
 
-/* Lazy-load heavy components */
 const RouteMap     = dynamic(() => import("./components/RouteMap"),     { ssr: false });
 const BatteryGauge = dynamic(() => import("./components/BatteryGauge"), { ssr: false });
-
-/* ─── tiny design primitives ─── */
-const mono: React.CSSProperties = { fontFamily: "var(--font-mono)" };
-
-function Label({ children, color }: { children: React.ReactNode; color?: string }) {
-  return (
-    <div style={{
-      ...mono, fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em",
-      color: color ?? "var(--text3)", marginBottom: 4,
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function Card({
-  children, accent, style,
-}: {
-  children: React.ReactNode;
-  accent?: string;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <div style={{
-      background: "var(--surface)", border: `1px solid ${accent ?? "var(--border)"}`,
-      borderRadius: "var(--radius)", overflow: "hidden",
-      boxShadow: "var(--shadow)", ...style,
-    }}>
-      {children}
-    </div>
-  );
-}
-
-function CardHeader({ icon, title, right }: { icon?: string; title: string; right?: React.ReactNode }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8,
-      padding: "9px 14px", borderBottom: "1px solid var(--border)",
-      background: "var(--surface2)",
-    }}>
-      {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
-      <Label>{title}</Label>
-      {right && <div style={{ marginLeft: "auto" }}>{right}</div>}
-    </div>
-  );
-}
 
 /* ─── EV presets ─── */
 const EV_PRESETS = [
@@ -70,59 +23,52 @@ function getBatteryColor(p: number) {
   return "#dc2626";
 }
 
-/* ─── Chat message types ─── */
 type Msg =
   | { kind: "user";   text: string }
   | { kind: "ai";     html: string }
   | { kind: "typing" }
   | { kind: "form" };
 
-/* ════════════════════════════════════════════════════
-   MAIN PAGE
-════════════════════════════════════════════════════ */
+const TABS = [
+  { id: "navigate",  label: "Navigate",  icon: "🗺️" },
+  { id: "analytics", label: "Analytics", icon: "📊" },
+  { id: "battery",   label: "Battery",   icon: "🔋" },
+  { id: "chargers",  label: "Chargers",  icon: "⚡" },
+  { id: "ai",        label: "AI",        icon: "🤖" },
+];
+
 export default function HomePage() {
-  /* theme */
   const [dark, setDark] = useState(false);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
   }, [dark]);
 
-  /* chat state */
-  const [msgs, setMsgs]         = useState<Msg[]>([
-    { kind: "ai", html: "Hey! I'm <strong>VoltIQ</strong> ⚡ — your EV range assistant.<br><br>Fill in your route details below and I'll predict battery usage, find chargers, and give you an AI trip analysis." },
+  const [msgs, setMsgs] = useState<Msg[]>([
+    { kind: "ai", html: "Hey! I'm <strong>VoltIQ</strong> ⚡<br>Your intelligent EV range planner.<br><br>Tell me your route and I'll predict battery usage, find chargers, and give you a complete trip analysis." },
     { kind: "form" },
   ]);
   const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  /* form state */
   const [form, setForm] = useState<RouteFormData>({
     origin: "", destination: "", batteryPercent: 74, vehicleRangeKm: 400,
   });
   const [preset, setPreset]   = useState("Custom");
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
 
-  /* result + panel */
   const [result, setResult]       = useState<RoutePlanResult | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("navigate");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  /* scroll chat to bottom */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
 
-  function pushMsg(m: Msg) {
-    setMsgs(prev => [...prev, m]);
-  }
-
   async function handleCalculate() {
     if (!form.origin || !form.destination) return;
     setLoading(true);
-    setError(null);
 
-    /* replace form with submitted state, add user bubble */
     setMsgs(prev => prev.filter(m => m.kind !== "form").concat([
       { kind: "user", text: `${form.origin} → ${form.destination}\n${preset} · ${form.batteryPercent}% battery` },
       { kind: "typing" },
@@ -134,34 +80,27 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error || "Failed to calculate route");
-      }
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || "Failed"); }
       const data: RoutePlanResult = await res.json();
       setResult(data);
 
       const willReach = data.battery.willReachDestination;
       setMsgs(prev => prev.filter(m => m.kind !== "typing").concat([{
         kind: "ai",
-        html: `Route calculated! Here's your trip summary:<br><br>
+        html: `Route calculated! <br><br>
 📍 <strong>${form.origin}</strong> → <strong>${form.destination}</strong><br>
-🔋 Starting at ${form.batteryPercent}% · ${preset}<br>
-🌿 Distance: ${data.route.distanceKm} km · ETA ${data.route.durationMin} min<br>
+🌿 ${data.route.distanceKm} km · ${data.route.durationMin} min<br>
 ${willReach
-  ? `✅ You'll arrive with <strong>${Math.max(0, data.battery.remainingBattery).toFixed(0)}%</strong> battery remaining`
-  : `⚠️ <strong>Charging stop needed</strong> — ${Math.abs(data.battery.remainingBattery).toFixed(0)}% short`
+  ? `✅ Arriving with <strong>${Math.max(0, data.battery.remainingBattery).toFixed(0)}%</strong> battery`
+  : `⚠️ <strong>Charge stop needed</strong> — ${Math.abs(data.battery.remainingBattery).toFixed(0)}% short`
 }<br><br>
-<em style="opacity:.55;font-size:12px">See the panels on the right for full details ↗</em>`,
+<span style="opacity:.5;font-size:11px">Use the panels → for full details</span>`,
       }]));
-
       setPanelOpen(true);
     } catch (e: any) {
       setMsgs(prev => prev.filter(m => m.kind !== "typing").concat([{
-        kind: "ai",
-        html: `⚠️ ${e.message || "Something went wrong. Please check your inputs."}`,
+        kind: "ai", html: `⚠️ ${e.message || "Something went wrong."}`,
       }]));
-      setError(e.message);
     } finally {
       setLoading(false);
     }
@@ -171,109 +110,83 @@ ${willReach
     const text = chatInput.trim();
     if (!text) return;
     setChatInput("");
-    pushMsg({ kind: "user", text });
-    pushMsg({ kind: "typing" });
-
+    setMsgs(prev => [...prev, { kind: "user", text }, { kind: "typing" }]);
     await new Promise(r => setTimeout(r, 900));
     setMsgs(prev => {
       const filtered = prev.filter(m => m.kind !== "typing");
       const lower = text.toLowerCase();
       let html = "I can help! Use the tabs on the right to explore battery, chargers, and AI analysis.";
-      if (lower.includes("charg"))
-        html = "I found chargers along your route. Check the <strong>Chargers</strong> tab for live status and directions!";
-      else if (lower.includes("weather"))
-        html = "Current conditions affect your range by up to −12%. See the <strong>Navigate</strong> tab for full weather details.";
-      else if (lower.includes("batter"))
-        html = "Your battery prediction is in the <strong>Battery</strong> tab — including health score, impact factors, and arrival estimate.";
-      else if (lower.includes("speed"))
-        html = "Optimal speed for maximum range on your route is around <strong>72 km/h</strong>. See AI Analysis for personalised tips.";
-      else if (lower.includes("route") || lower.includes("map"))
-        html = "Your route is shown on the <strong>Navigate</strong> tab — eco, fast, and shortest options with battery cost for each.";
+      if (lower.includes("charg"))       html = "Charger details are in the <strong>Chargers</strong> tab — with live status and directions.";
+      else if (lower.includes("batter")) html = "Your battery prediction is in the <strong>Battery</strong> tab with impact factors.";
+      else if (lower.includes("speed"))  html = "Optimal speed for maximum range is around <strong>72 km/h</strong>. See AI tab for personalised tips.";
+      else if (lower.includes("route"))  html = "Your route is shown on the <strong>Navigate</strong> tab with eco, fast, and shortest options.";
       return [...filtered, { kind: "ai" as const, html }];
     });
   }
 
-  /* ─── derived ─── */
   const startBat = result
     ? Math.round(result.battery.totalBatteryUsed + Math.max(0, result.battery.remainingBattery))
     : form.batteryPercent;
 
-  const TABS = [
-    { id: "navigate",  label: "Navigate" },
-    { id: "analytics", label: "Analytics" },
-    { id: "battery",   label: "Battery" },
-    { id: "chargers",  label: "Chargers" },
-    { id: "ai",        label: "AI Analysis" },
-  ];
-
-  /* ════ RENDER ════ */
   return (
-    <div style={{
-      display: "flex", height: "100vh", overflow: "hidden",
-      background: "var(--bg)",
-    }}>
-
-      {/* ══════════ LEFT: CHAT PANEL ══════════ */}
-      <div style={{
-        width: panelOpen ? 360 : "100%",
-        maxWidth: panelOpen ? 360 : 640,
-        margin: panelOpen ? 0 : "0 auto",
-        display: "flex", flexDirection: "column", height: "100vh",
-        flexShrink: 0,
-        transition: "width 0.5s cubic-bezier(.4,0,.2,1), max-width 0.5s cubic-bezier(.4,0,.2,1)",
-        borderRight: panelOpen ? "1px solid var(--border)" : "none",
-      }}>
-
+<div className="relative flex h-screen overflow-hidden bg-[var(--bg)] transition-all duration-500">
+      {/* ── CHAT SIDEBAR ── */}
+      <div className={`
+        flex flex-col h-full flex-shrink-0 transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
+        border-r border-[var(--border)]
+     ${panelOpen
+  ? sidebarCollapsed
+    ? "w-0 overflow-hidden border-none"
+    : "w-[360px]"
+  : "w-full max-w-[640px] mx-auto border-none justify-center"
+}
+      `}>
         {/* Header */}
-        <div style={{
-          padding: "12px 16px", display: "flex", alignItems: "center", gap: 10,
-          borderBottom: "1px solid var(--border)", background: "var(--surface)",
-          flexShrink: 0,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 16, color: "var(--green)" }}>
-            <div style={{
-              width: 28, height: 28, background: "var(--green)", borderRadius: 8,
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#fff",
-            }}>⚡</div>
-            VoltIQ
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)] flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[var(--green)] flex items-center justify-center text-white text-sm font-bold">⚡</div>
+            <span className="font-bold text-[15px] text-[var(--green)] tracking-tight" style={{ fontFamily: "var(--font-sans)" }}>VoltIQ</span>
           </div>
 
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#16a34a", boxShadow: "0 0 0 2px var(--green-dim)" }} />
-            <span style={{ ...mono, fontSize: 10, color: "var(--text3)" }}>Live</span>
-            <button onClick={() => setDark(d => !d)} style={{
-              background: "none", border: "1px solid var(--border)", color: "var(--text2)",
-              padding: "5px 9px", borderRadius: "var(--radius-xs)", fontSize: 13,
-              cursor: "pointer",
-            }}>{dark ? "☀️" : "🌙"}</button>
-            <button style={{
-              background: "rgba(220,38,38,.08)", border: "1px solid rgba(220,38,38,.2)",
-              color: "#dc2626", padding: "5px 9px", borderRadius: "var(--radius-xs)",
-              fontSize: 11, ...mono, cursor: "pointer",
-            }}>SOS</button>
+          <div className="flex items-center gap-1.5 ml-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" style={{ boxShadow: "0 0 0 2px rgba(16,185,129,0.25)" }} />
+            <span className="text-[10px] text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>Live</span>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            {panelOpen && (
+              <button
+                onClick={() => setSidebarCollapsed(v => !v)}
+                className="w-7 h-7 rounded-md border border-[var(--border)] bg-[var(--surface2)] text-[var(--text3)] text-xs hover:text-[var(--text)] hover:border-[var(--border2)] transition-all flex items-center justify-center"
+              >
+                {sidebarCollapsed ? "→" : "←"}
+              </button>
+            )}
+            <button
+              onClick={() => setDark(d => !d)}
+              className="w-7 h-7 rounded-md border border-[var(--border)] bg-[var(--surface2)] text-xs hover:border-[var(--border2)] transition-all flex items-center justify-center"
+            >
+              {dark ? "☀️" : "🌙"}
+            </button>
+            <button className="px-2.5 py-1 rounded-md text-[10px] font-semibold text-red-500 border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 transition-all" style={{ fontFamily: "var(--font-mono)" }}>
+              SOS
+            </button>
           </div>
         </div>
 
         {/* Messages */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
-          {msgs.map((m, i) => {
+<div
+  className={`flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3 ${
+    !panelOpen ? "justify-center" : ""
+  }`}
+>          {msgs.map((m, i) => {
             if (m.kind === "typing") return (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%", background: "var(--green-dim)",
-                  border: "1px solid var(--green-border)", display: "flex", alignItems: "center",
-                  justifyContent: "center", fontSize: 12, flexShrink: 0,
-                }}>⚡</div>
-                <div style={{
-                  background: "var(--surface)", border: "1px solid var(--border)",
-                  borderRadius: "3px 12px 12px 12px", padding: "10px 14px",
-                }}>
-                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <div key={i} className="flex items-end gap-2 animate-[fadeUp_.2s_ease]">
+                <Avatar />
+                <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[4px_16px_16px_16px] px-4 py-3">
+                  <div className="flex gap-1 items-center">
                     {[0, 150, 300].map(d => (
-                      <div key={d} style={{
-                        width: 6, height: 6, borderRadius: "50%", background: "var(--text3)",
-                        animation: `bounce 0.9s ${d}ms infinite`,
-                      }} />
+                      <div key={d} className="w-1.5 h-1.5 rounded-full bg-[var(--text3)]" style={{ animation: `bounce 0.9s ${d}ms infinite` }} />
                     ))}
                   </div>
                 </div>
@@ -281,48 +194,30 @@ ${willReach
             );
 
             if (m.kind === "form") return (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, animation: "fadeUp .3s ease" }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%", background: "var(--green-dim)",
-                  border: "1px solid var(--green-border)", display: "flex", alignItems: "center",
-                  justifyContent: "center", fontSize: 12, flexShrink: 0, marginTop: 2,
-                }}>⚡</div>
+              <div key={i} className="flex items-end gap-2 animate-[fadeUp_.2s_ease]">
+                <Avatar />
                 <RouteFormInline
-                  form={form}
-                  setForm={setForm}
-                  preset={preset}
-                  setPreset={setPreset}
-                  loading={loading}
-                  onSubmit={handleCalculate}
+                  form={form} setForm={setForm}
+                  preset={preset} setPreset={setPreset}
+                  loading={loading} onSubmit={handleCalculate}
                 />
               </div>
             );
 
             if (m.kind === "user") return (
-              <div key={i} style={{ display: "flex", justifyContent: "flex-end", animation: "fadeUp .3s ease" }}>
-                <div style={{
-                  background: "var(--green)", color: "#fff",
-                  borderRadius: "12px 12px 3px 12px", padding: "10px 14px",
-                  fontSize: 13, lineHeight: 1.55, maxWidth: "85%",
-                  whiteSpace: "pre-line",
-                }}>
+              <div key={i} className="flex justify-end animate-[fadeUp_.2s_ease]">
+                <div className="bg-[var(--green)] text-white rounded-[16px_16px_4px_16px] px-4 py-2.5 text-sm leading-relaxed max-w-[80%] whitespace-pre-line" style={{ fontFamily: "var(--font-sans)" }}>
                   {m.text}
                 </div>
               </div>
             );
 
             if (m.kind === "ai") return (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, animation: "fadeUp .3s ease" }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%", background: "var(--green-dim)",
-                  border: "1px solid var(--green-border)", display: "flex", alignItems: "center",
-                  justifyContent: "center", fontSize: 12, flexShrink: 0, marginTop: 2,
-                }}>⚡</div>
-                <div style={{
-                  background: "var(--surface)", border: "1px solid var(--border)",
-                  borderRadius: "3px 12px 12px 12px", padding: "10px 14px",
-                  fontSize: 13, lineHeight: 1.6, color: "var(--text)", maxWidth: "85%",
-                }}
+              <div key={i} className="flex items-end gap-2 animate-[fadeUp_.2s_ease]">
+                <Avatar />
+                <div
+                  className="bg-[var(--surface)] border border-[var(--border)] rounded-[4px_16px_16px_16px] px-4 py-2.5 text-sm leading-relaxed text-[var(--text)] max-w-[85%]"
+                  style={{ fontFamily: "var(--font-sans)" }}
                   dangerouslySetInnerHTML={{ __html: m.html }}
                 />
               </div>
@@ -332,59 +227,64 @@ ${willReach
           <div ref={chatEndRef} />
         </div>
 
-        {/* Chat input */}
-        <div style={{
-          padding: "10px 14px", borderTop: "1px solid var(--border)",
-          background: "var(--surface)", display: "flex", gap: 8, alignItems: "center", flexShrink: 0,
-        }}>
+        {/* Input */}
+        <div className="px-4 py-3 border-t border-[var(--border)] bg-[var(--surface)] flex gap-2 items-center flex-shrink-0">
           <input
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && sendChat()}
-            placeholder="Ask about battery, chargers, weather…"
-            style={{
-              flex: 1, background: "var(--surface2)", border: "1px solid var(--border)",
-              borderRadius: 20, padding: "8px 14px", fontSize: 13,
-              fontFamily: "var(--font-sans)", color: "var(--text)", outline: "none",
-            }}
+            placeholder="Ask about battery, chargers…"
+            className="flex-1 bg-[var(--surface2)] border border-[var(--border)] rounded-full px-4 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text3)] outline-none focus:border-[var(--green)] transition-colors"
+            style={{ fontFamily: "var(--font-sans)" }}
           />
-          <button onClick={sendChat} style={{
-            width: 36, height: 36, borderRadius: "50%", background: "var(--green)",
-            border: "none", color: "#fff", fontSize: 16, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>↑</button>
+          <button
+            onClick={sendChat}
+            className="w-9 h-9 rounded-full bg-[var(--green)] text-white flex items-center justify-center text-base hover:opacity-90 transition-opacity flex-shrink-0"
+          >↑</button>
         </div>
       </div>
 
-      {/* ══════════ RIGHT: MAP + TABS PANEL ══════════ */}
-      <div style={{
-        flex: 1, display: "flex", flexDirection: "column",
-        opacity: panelOpen ? 1 : 0, pointerEvents: panelOpen ? "auto" : "none",
-        transition: "opacity 0.5s 0.2s",
-        background: "var(--bg)", overflow: "hidden",
-      }}>
+      {/* ── RIGHT PANEL ── */}
+      <div className={`
+        flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
+${panelOpen
+  ? "opacity-100 translate-x-0"
+  : "opacity-0 translate-x-8 pointer-events-none w-0"
+}      `}>
+        {/* Collapsed sidebar toggle */}
+        {sidebarCollapsed && (
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-6 h-12 bg-[var(--surface)] border border-[var(--border)] rounded-r-lg text-[var(--text3)] hover:text-[var(--text)] flex items-center justify-center text-xs transition-all shadow-sm"
+          >→</button>
+        )}
 
         {/* Tab bar */}
-        <div style={{
-          display: "flex", borderBottom: "1px solid var(--border)",
-          background: "var(--surface)", padding: "0 16px", flexShrink: 0,
-        }}>
+        <div className="flex items-center border-b border-[var(--border)] bg-[var(--surface)] px-2 flex-shrink-0 overflow-x-auto">
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              padding: "12px 14px", fontSize: 12, ...mono,
-              color: activeTab === t.id ? "var(--green)" : "var(--text3)",
-              border: "none", background: "none", cursor: "pointer",
-              borderBottom: `2px solid ${activeTab === t.id ? "var(--green)" : "transparent"}`,
-              transition: "all .15s", whiteSpace: "nowrap",
-            }}>{t.label}</button>
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`
+                flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-all
+                ${activeTab === t.id
+                  ? "text-[var(--green)] border-[var(--green)]"
+                  : "text-[var(--text3)] border-transparent hover:text-[var(--text2)]"
+                }
+              `}
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              <span className="text-sm">{t.icon}</span>
+              {t.label}
+            </button>
           ))}
         </div>
 
         {/* Tab content */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div className="flex-1 overflow-y-auto">
           {result && (
             <>
-              {activeTab === "navigate"  && <TabNavigate  result={result} startBat={startBat} />}
+              {activeTab === "navigate"  && <TabNavigate  result={result} startBat={startBat} dark={dark} />}
               {activeTab === "analytics" && <TabAnalytics result={result} />}
               {activeTab === "battery"   && <TabBattery   result={result} startBat={startBat} />}
               {activeTab === "chargers"  && <TabChargers  result={result} />}
@@ -397,654 +297,452 @@ ${willReach
   );
 }
 
-/* ════════════════════════════════════════════════════
-   ROUTE FORM (inline in chat)
-════════════════════════════════════════════════════ */
-function RouteFormInline({
-  form, setForm, preset, setPreset, loading, onSubmit,
-}: {
-  form: RouteFormData;
-  setForm: React.Dispatch<React.SetStateAction<RouteFormData>>;
-  preset: string;
-  setPreset: (p: string) => void;
-  loading: boolean;
-  onSubmit: () => void;
+/* ── AVATAR ── */
+function Avatar() {
+  return (
+    <div className="w-7 h-7 rounded-full bg-[var(--green-dim)] border border-[var(--green-border)] flex items-center justify-center text-xs flex-shrink-0 mb-0.5">⚡</div>
+  );
+}
+
+/* ── ROUTE FORM ── */
+function RouteFormInline({ form, setForm, preset, setPreset, loading, onSubmit }: {
+  form: RouteFormData; setForm: React.Dispatch<React.SetStateAction<RouteFormData>>;
+  preset: string; setPreset: (p: string) => void;
+  loading: boolean; onSubmit: () => void;
 }) {
-  const inputStyle: React.CSSProperties = {
-    background: "var(--surface2)", border: "1px solid var(--border)",
-    borderRadius: "var(--radius-xs)", padding: "8px 10px",
-    fontSize: 13, fontFamily: "var(--font-sans)", color: "var(--text)",
-    outline: "none", width: "100%",
-  };
+  const inp = "w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--green)] transition-colors placeholder:text-[var(--text3)]";
 
   return (
-    <div style={{
-      background: "var(--surface)", border: "1px solid var(--border)",
-      borderRadius: "var(--radius)", padding: 16,
-      display: "flex", flexDirection: "column", gap: 12,
-      boxShadow: "var(--shadow)", flex: 1, maxWidth: 320,
-    }}>
-      <Label>Plan your route</Label>
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[4px_16px_16px_16px] p-4 flex flex-col gap-3 w-full max-w-[300px] shadow-sm">
+      <p className="text-[10px] font-semibold text-[var(--text3)] uppercase tracking-widest" style={{ fontFamily: "var(--font-mono)" }}>Plan Your Route</p>
 
       {/* Origin */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text3)" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
-          Starting point
+      <div className="flex flex-col gap-1.5">
+        <label className="flex items-center gap-1.5 text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+          From
         </label>
-        <input
-          style={inputStyle}
-          placeholder="e.g. Bengaluru, Karnataka"
-          value={form.origin}
-          onChange={e => setForm(f => ({ ...f, origin: e.target.value }))}
-        />
+        <input className={inp} placeholder="e.g. Bengaluru, KA" value={form.origin} onChange={e => setForm(f => ({ ...f, origin: e.target.value }))} />
       </div>
 
       {/* Destination */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text3)" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", display: "inline-block" }} />
-          Destination
+      <div className="flex flex-col gap-1.5">
+        <label className="flex items-center gap-1.5 text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+          To
         </label>
-        <input
-          style={inputStyle}
-          placeholder="e.g. Mysore Palace, KA"
-          value={form.destination}
-          onChange={e => setForm(f => ({ ...f, destination: e.target.value }))}
-        />
+        <input className={inp} placeholder="e.g. Mysore, KA" value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} />
       </div>
 
-      {/* Battery slider */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em" }}>
-          <span style={{ color: "var(--text3)" }}>Current battery</span>
-          <span style={{ color: getBatteryColor(form.batteryPercent), fontWeight: 600 }}>{form.batteryPercent}%</span>
+      {/* Battery */}
+      <div>
+        <div className="flex justify-between mb-1.5">
+          <span className="text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>Battery</span>
+          <span className="text-[10px] font-bold" style={{ fontFamily: "var(--font-mono)", color: getBatteryColor(form.batteryPercent) }}>{form.batteryPercent}%</span>
         </div>
-        <input
-          type="range" min={5} max={100} value={form.batteryPercent}
+        <input type="range" min={5} max={100} value={form.batteryPercent}
           onChange={e => setForm(f => ({ ...f, batteryPercent: parseInt(e.target.value) }))}
-          style={{
-            background: `linear-gradient(to right, ${getBatteryColor(form.batteryPercent)} ${form.batteryPercent}%, var(--border) ${form.batteryPercent}%)`,
-          }}
+          style={{ background: `linear-gradient(to right, ${getBatteryColor(form.batteryPercent)} ${form.batteryPercent}%, var(--border) ${form.batteryPercent}%)` }}
         />
       </div>
 
-      {/* Vehicle presets */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <Label>Vehicle model</Label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 5 }}>
+      {/* Presets */}
+      <div>
+        <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider mb-1.5" style={{ fontFamily: "var(--font-mono)" }}>Vehicle</p>
+        <div className="grid grid-cols-3 gap-1">
           {EV_PRESETS.map(p => (
-            <button
-              key={p.label}
-              onClick={() => { setPreset(p.label); setForm(f => ({ ...f, vehicleRangeKm: p.range })); }}
-              style={{
-                padding: "7px 4px", borderRadius: "var(--radius-xs)",
-                border: `1px solid ${preset === p.label ? "var(--green)" : "var(--border)"}`,
-                background: preset === p.label ? "var(--green-dim)" : "var(--surface2)",
-                cursor: "pointer", fontSize: 11, fontFamily: "var(--font-sans)",
-                color: preset === p.label ? "var(--green)" : "var(--text2)",
-                textAlign: "center", lineHeight: 1.3, fontWeight: preset === p.label ? 700 : 400,
-              }}
+            <button key={p.label} onClick={() => { setPreset(p.label); setForm(f => ({ ...f, vehicleRangeKm: p.range })); }}
+              className={`py-1.5 px-1 rounded-md text-[11px] text-center border transition-all cursor-pointer ${preset === p.label ? "border-[var(--green)] bg-[var(--green-dim)] text-[var(--green)] font-semibold" : "border-[var(--border)] bg-[var(--surface2)] text-[var(--text2)]"}`}
+              style={{ fontFamily: "var(--font-sans)" }}
             >
-              {p.label}
-              {p.range > 0 && <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, opacity: .6, marginTop: 2 }}>{p.range}km</div>}
+              <div className="leading-tight">{p.label}</div>
+              <div className="text-[9px] opacity-50 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{p.range}km</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Custom range */}
       {preset === "Custom" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <Label>Max range (km)</Label>
-          <input
-            type="number" min={50} max={1000}
-            value={form.vehicleRangeKm}
-            onChange={e => setForm(f => ({ ...f, vehicleRangeKm: parseInt(e.target.value) }))}
-            style={inputStyle}
-          />
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>Range (km)</label>
+          <input type="number" min={50} max={1000} className={inp} value={form.vehicleRangeKm}
+            onChange={e => setForm(f => ({ ...f, vehicleRangeKm: parseInt(e.target.value) }))} />
         </div>
       )}
 
-      <button
-        onClick={onSubmit}
-        disabled={loading || !form.origin || !form.destination}
-        style={{
-          width: "100%", padding: "10px", background: "var(--green)", color: "#fff",
-          border: "none", borderRadius: "var(--radius-xs)", fontSize: 13,
-          fontFamily: "var(--font-sans)", fontWeight: 700, cursor: "pointer",
-          opacity: loading || !form.origin || !form.destination ? .5 : 1,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}
+      <button onClick={onSubmit} disabled={loading || !form.origin || !form.destination}
+        className="w-full py-2.5 rounded-lg bg-[var(--green)] text-white text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+        style={{ fontFamily: "var(--font-sans)" }}
       >
         {loading ? (
-          <>
-            <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
-            Calculating…
-          </>
-        ) : "⚡ Calculate EV Range"}
+          <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full" style={{ animation: "spin .7s linear infinite" }} />Calculating…</>
+        ) : "⚡ Calculate Range"}
       </button>
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════
-   TAB: NAVIGATE
-════════════════════════════════════════════════════ */
-function TabNavigate({ result, startBat }: { result: RoutePlanResult; startBat: number }) {
-  const { origin, destination, route, weather, battery, chargingStations } = result;
-  const originCity = origin.display_name.split(",")[0];
-  const destCity   = destination.display_name.split(",")[0];
+/* ═══════ TABS ═══════ */
 
-  const weatherIcon =
-    weather.conditions === "Ideal" ? "☀️" :
-    weather.conditions.includes("Rain") ? "🌧️" :
-    weather.conditions.includes("Cold") ? "❄️" :
-    weather.conditions.includes("Wind") ? "💨" : "🌡️";
+function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+      <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider mb-2" style={{ fontFamily: "var(--font-mono)" }}>{label}</p>
+      <p className="text-2xl font-bold text-[var(--text)]" style={{ color: color || "var(--text)", fontFamily: "var(--font-sans)" }}>{value}</p>
+      {sub && <p className="text-[11px] text-[var(--text3)] mt-1" style={{ fontFamily: "var(--font-mono)" }}>{sub}</p>}
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-[11px] font-semibold text-[var(--text3)] uppercase tracking-widest mb-3" style={{ fontFamily: "var(--font-mono)" }}>{children}</h3>;
+}
+
+/* ── NAVIGATE TAB ── */
+function TabNavigate({ result, startBat, dark }: { result: RoutePlanResult; startBat: number; dark: boolean }) {
+  const { origin, destination, route, weather, battery, chargingStations } = result;
+
+  const weatherIcon = weather.conditions === "Ideal" ? "☀️" : weather.conditions.includes("Rain") ? "🌧️" : weather.conditions.includes("Cold") ? "❄️" : weather.conditions.includes("Wind") ? "💨" : "🌡️";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
-
+    <div className="p-5 flex flex-col gap-5">
       {/* Map */}
-      <div style={{
-        borderRadius: "var(--radius)", overflow: "hidden",
-        border: "1px solid var(--border)", position: "relative",
-        boxShadow: "var(--shadow)",
-      }}>
-        <RouteMap
-          origin={origin}
-          destination={destination}
-          chargingStations={chargingStations}
-          batteryPercent={startBat}
-          remainingBattery={battery.remainingBattery}
-        />
+<div
+  className="rounded-2xl overflow-hidden border border-[var(--border)]"
+  style={{ height: 460 }}
+>        <RouteMap origin={origin} destination={destination} chargingStations={chargingStations} batteryPercent={startBat} remainingBattery={battery.remainingBattery} />
       </div>
 
       {/* Route options */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-        {[
-          { label: "⭐ Eco", dist: route.distanceKm, bat: battery.totalBatteryUsed, accent: "var(--green)", isMain: true },
-          { label: "Fastest", dist: Math.round(route.distanceKm * 0.89), bat: Math.round(battery.totalBatteryUsed * 1.42), accent: undefined },
-          { label: "Shortest", dist: Math.round(route.distanceKm * 0.81), bat: Math.round(battery.totalBatteryUsed * 1.76), accent: undefined },
-        ].map(r => (
-          <Card key={r.label} style={{ borderTop: r.isMain ? `2px solid ${r.accent}` : undefined }}>
-            <div style={{ padding: "10px 12px" }}>
-              <Label color={r.isMain ? "var(--green)" : undefined}>{r.label}</Label>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", marginTop: 2 }}>{r.dist} km</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#dc2626", marginTop: 2 }}>−{r.bat}% bat</div>
+      <div>
+        <SectionTitle>Route Options</SectionTitle>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Eco ⭐", dist: route.distanceKm, bat: battery.totalBatteryUsed, accent: "var(--green)" },
+            { label: "Fastest", dist: Math.round(route.distanceKm * 0.89), bat: Math.round(battery.totalBatteryUsed * 1.42) },
+            { label: "Shortest", dist: Math.round(route.distanceKm * 0.81), bat: Math.round(battery.totalBatteryUsed * 1.76) },
+          ].map(r => (
+            <div key={r.label} className={`bg-[var(--surface)] border rounded-xl p-3 ${r.accent ? "border-[var(--green)]" : "border-[var(--border)]"}`}>
+              <p className="text-[10px] font-semibold mb-1" style={{ fontFamily: "var(--font-mono)", color: r.accent || "var(--text3)" }}>{r.label}</p>
+              <p className="text-xl font-bold text-[var(--text)]">{r.dist}<span className="text-xs text-[var(--text3)] ml-0.5">km</span></p>
+              <p className="text-[11px] text-red-500 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>−{r.bat}% bat</p>
             </div>
-          </Card>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Summary row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <Card>
-          <CardHeader title="Real predicted range" />
-          <div style={{ padding: "10px 14px", display: "flex", alignItems: "baseline", gap: 6 }}>
-            <div style={{ fontSize: 30, fontWeight: 800 }}>{battery.effectiveRange}</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text3)" }}>km</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)", marginLeft: "auto" }}>Mfr: {result.route.distanceKm + Math.round(result.battery.totalBatteryUsed * 0.4)}km</div>
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="ETA" />
-          <div style={{ padding: "10px 14px" }}>
-            <div style={{ fontSize: 30, fontWeight: 800 }}>{Math.floor(route.durationMin / 60)}h {route.durationMin % 60}m</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)", marginTop: 2 }}>
-              {chargingStations.length > 0 ? `${chargingStations.filter(s => !battery.willReachDestination).length || 1} charge stop en route` : "No charge stop needed"}
-            </div>
-          </div>
-        </Card>
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Predicted Range" value={`${battery.effectiveRange} km`} sub="After weather & style adjustments" />
+        <StatCard label="ETA" value={`${Math.floor(route.durationMin / 60)}h ${route.durationMin % 60}m`} sub={chargingStations.length > 0 ? "Includes charge stop" : "No charge stop needed"} />
       </div>
 
       {/* Weather */}
-      <Card>
-        <CardHeader icon={weatherIcon} title="Weather impact" />
-        <div style={{ padding: "10px 14px", display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6, flex: 1 }}>
+      <div>
+        <SectionTitle>Weather Impact</SectionTitle>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">{weatherIcon}</span>
+            <div>
+              <p className="text-sm font-semibold text-[var(--text)]">{weather.conditions}</p>
+              <p className="text-[11px] text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>
+                {Math.round((1 - weather.weatherFactor) * 100)}% range reduction
+              </p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-lg font-bold text-[var(--green)]">{Math.round(weather.weatherFactor * 100)}%</p>
+              <p className="text-[10px] text-[var(--text3)]">efficiency</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
             {[
               { val: `${weather.temperature}°C`, key: "Temp" },
               { val: `${weather.wind_speed}km/h`, key: "Wind" },
               { val: weather.precipitation > 0 ? `${weather.precipitation}mm` : "Dry", key: "Rain" },
             ].map(w => (
-              <div key={w.key} style={{
-                background: "var(--surface2)", border: "1px solid var(--border)",
-                borderRadius: "var(--radius-xs)", padding: "8px 4px", textAlign: "center",
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{w.val}</div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".05em", marginTop: 2 }}>{w.key}</div>
+              <div key={w.key} className="bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-2 text-center">
+                <p className="text-sm font-bold text-[var(--text)]">{w.val}</p>
+                <p className="text-[9px] text-[var(--text3)] uppercase tracking-wider mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{w.key}</p>
               </div>
             ))}
           </div>
-          <div style={{
-            background: "rgba(217,119,6,.08)", border: "1px solid rgba(217,119,6,.2)",
-            borderRadius: "var(--radius-xs)", padding: "8px 10px",
-            fontFamily: "var(--font-mono)", fontSize: 11, color: "#92400e", maxWidth: 140, lineHeight: 1.5,
-          }}>
-            {Math.round((1 - weather.weatherFactor) * 100)}% range impact from {weather.conditions.toLowerCase()} conditions
-          </div>
         </div>
-      </Card>
+      </div>
 
-      {/* Power mode */}
-      <Card>
-        <CardHeader title="Power mode" />
-        <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
-            {[
-              { icon: "🌿", label: "Eco", active: true },
-              { icon: "🏎", label: "Sport" },
-              { icon: "🌙", label: "Night" },
-              { icon: "💾", label: "Save" },
-            ].map(m => (
-              <div key={m.label} style={{
-                padding: "8px 4px", borderRadius: "var(--radius-xs)", textAlign: "center", cursor: "pointer",
-                background: m.active ? "var(--green-dim)" : "var(--surface2)",
-                border: `1px solid ${m.active ? "var(--green-border)" : "var(--border)"}`,
-              }}>
-                <div style={{ fontSize: 16 }}>{m.icon}</div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: ".05em", marginTop: 3, color: m.active ? "var(--green)" : "var(--text3)", fontWeight: m.active ? 600 : 400 }}>{m.label}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{
-            fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)",
-            background: "var(--surface2)", border: "1px solid var(--border)",
-            borderRadius: "var(--radius-xs)", padding: "8px 10px", lineHeight: 1.5,
-          }}>
-            Eco mode active — range extended by ~18km. Regenerative braking on.
-          </div>
-        </div>
-      </Card>
-
-      <button style={{
-        width: "100%", padding: 11, background: "var(--green)", color: "#fff",
-        border: "none", borderRadius: "var(--radius-xs)", fontSize: 13, fontWeight: 700,
-        fontFamily: "var(--font-sans)", cursor: "pointer",
-      }}>
+      <button className="w-full py-3 bg-[var(--green)] text-white rounded-xl font-bold text-sm hover:opacity-90 transition-opacity" style={{ fontFamily: "var(--font-sans)" }}>
         Start Navigation →
       </button>
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════
-   TAB: ANALYTICS
-════════════════════════════════════════════════════ */
+/* ── ANALYTICS TAB ── */
 function TabAnalytics({ result }: { result: RoutePlanResult }) {
   const { battery, route } = result;
-  const mfrRange = Math.round(battery.effectiveRange / battery.weatherFactor ?? battery.effectiveRange * 1.27);
+  const mfrRange = Math.round(battery.effectiveRange * 1.27);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
-
+    <div className="p-5 flex flex-col gap-5">
       {/* Range reality */}
-      <Card>
-        <CardHeader title="Range reality check" />
-        <div style={{ padding: "12px 14px", display: "flex", gap: 12, alignItems: "center" }}>
-          <div style={{ flex: 1, textAlign: "center" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: "var(--text3)", textDecoration: "line-through" }}>{mfrRange} km</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)", textTransform: "uppercase", marginTop: 2 }}>Manufacturer</div>
+      <div>
+        <SectionTitle>Range Reality Check</SectionTitle>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-4">
+          <div className="text-center flex-1">
+            <p className="text-2xl font-bold text-[var(--text3)] line-through">{mfrRange}km</p>
+            <p className="text-[10px] text-[var(--text3)] mt-1">Manufacturer</p>
           </div>
-          <div style={{ fontSize: 18, color: "var(--text3)" }}>→</div>
-          <div style={{ flex: 1, textAlign: "center", background: "var(--green-dim)", border: "1px solid var(--green-border)", borderRadius: "var(--radius-xs)", padding: 10 }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: "var(--green)" }}>{battery.effectiveRange} km</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--green)", opacity: .7, textTransform: "uppercase", marginTop: 2 }}>Real predicted</div>
-          </div>
-        </div>
-        <div style={{ margin: "0 14px 12px", background: "rgba(220,38,38,.06)", border: "1px solid rgba(220,38,38,.15)", borderRadius: "var(--radius-xs)", padding: "7px 10px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#dc2626" }}>
-          −{mfrRange - battery.effectiveRange}km gap due to weather, style &amp; battery age
-        </div>
-      </Card>
-
-      {/* Driving style analysis */}
-      <Card>
-        <CardHeader title="Driving style analysis" />
-        <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            { label: "Acceleration aggressiveness", pct: 72, val: "−18%", color: "#dc2626" },
-            { label: "Hard braking frequency",      pct: 48, val: "−7%",  color: "#d97706" },
-            { label: "Speed consistency",           pct: 85, val: "+4%",  color: "var(--green)" },
-          ].map(row => (
-            <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 12, color: "var(--text2)", minWidth: 180 }}>{row.label}</div>
-              <div style={{ flex: 1, height: 4, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{ width: `${row.pct}%`, height: "100%", background: row.color, borderRadius: 2, transition: "width .8s" }} />
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: row.color, minWidth: 34, textAlign: "right" }}>{row.val}</div>
-            </div>
-          ))}
-          <div style={{ marginTop: 4, background: "rgba(217,119,6,.07)", border: "1px solid rgba(217,119,6,.2)", borderRadius: "var(--radius-xs)", padding: "8px 10px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#92400e", lineHeight: 1.5 }}>
-            Your style reduces range by 18%. Smooth acceleration saves ~26km.
+          <div className="text-[var(--text3)]">→</div>
+          <div className="text-center flex-1 bg-[var(--green-dim)] border border-[var(--green-border)] rounded-lg p-3">
+            <p className="text-2xl font-bold text-[var(--green)]">{battery.effectiveRange}km</p>
+            <p className="text-[10px] text-[var(--green)] opacity-70 mt-1">Real predicted</p>
           </div>
         </div>
-      </Card>
+        <div className="mt-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg px-3 py-2 text-[11px] text-red-600 dark:text-red-400" style={{ fontFamily: "var(--font-mono)" }}>
+          −{mfrRange - battery.effectiveRange}km gap due to weather, style & battery age
+        </div>
+      </div>
 
       {/* Energy breakdown */}
-      <Card>
-        <CardHeader title="Energy breakdown" />
-        <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
+      <div>
+        <SectionTitle>Energy Breakdown</SectionTitle>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col gap-3">
           {[
             { label: "Distance load",  pct: 48, color: "#2563eb" },
             { label: "Weather drag",   pct: 28, color: "#d97706" },
             { label: "Traffic stops",  pct: 15, color: "#dc2626" },
             { label: "Driving style",  pct: 18, color: "#7c3aed" },
-            { label: "Other",          pct: 7,  color: "var(--text3)" },
           ].map(row => (
-            <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 12, color: "var(--text2)", minWidth: 130 }}>{row.label}</div>
-              <div style={{ flex: 1, height: 4, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{ width: `${row.pct}%`, height: "100%", background: row.color, borderRadius: 2 }} />
+            <div key={row.label} className="flex items-center gap-3">
+              <span className="text-xs text-[var(--text2)] w-28 flex-shrink-0">{row.label}</span>
+              <div className="flex-1 h-1.5 bg-[var(--surface2)] border border-[var(--border)] rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
               </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)", minWidth: 28, textAlign: "right" }}>{row.pct}%</div>
+              <span className="text-[11px] w-8 text-right" style={{ fontFamily: "var(--font-mono)", color: row.color }}>{row.pct}%</span>
             </div>
           ))}
         </div>
-      </Card>
+      </div>
 
-      {/* Consumption grid */}
-      <Card>
-        <CardHeader title="Consumption details" />
-        <div style={{ padding: "10px 14px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
-            {[
-              { val: `${battery.totalBatteryUsed}%`,             key: "Used",      color: "#dc2626" },
-              { val: `${Math.max(0, battery.remainingBattery)}%`, key: "Remaining", color: "var(--green)" },
-              { val: `${battery.effectiveRange}km`,               key: "Eff. Range", color: "#2563eb" },
-              { val: `${battery.safetyBuffer}%`,                  key: "Buffer",    color: "#7c3aed" },
-              { val: `${route.distanceKm}km`,                     key: "Distance",  color: "#d97706" },
-              { val: `${route.durationMin}m`,                     key: "ETA",       color: "var(--green)" },
-            ].map(s => (
-              <div key={s.key} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", padding: "8px 4px", textAlign: "center" }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.val}</div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".05em", marginTop: 2 }}>{s.key}</div>
+      {/* Driving style */}
+      <div>
+        <SectionTitle>Driving Style</SectionTitle>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col gap-3">
+          {[
+            { label: "Acceleration", pct: 72, val: "−18%", color: "#dc2626" },
+            { label: "Hard braking", pct: 48, val: "−7%",  color: "#d97706" },
+            { label: "Speed consistency", pct: 85, val: "+4%", color: "#16a34a" },
+          ].map(row => (
+            <div key={row.label} className="flex items-center gap-3">
+              <span className="text-xs text-[var(--text2)] w-32 flex-shrink-0">{row.label}</span>
+              <div className="flex-1 h-1.5 bg-[var(--surface2)] border border-[var(--border)] rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
+              </div>
+              <span className="text-[11px] w-10 text-right font-semibold" style={{ fontFamily: "var(--font-mono)", color: row.color }}>{row.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { val: `${battery.totalBatteryUsed}%`, key: "Used",     color: "#dc2626" },
+          { val: `${Math.max(0, battery.remainingBattery)}%`, key: "Remaining", color: "#16a34a" },
+          { val: `${battery.safetyBuffer}%`, key: "Buffer",   color: "#7c3aed" },
+        ].map(s => (
+          <div key={s.key} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center">
+            <p className="text-lg font-bold" style={{ color: s.color }}>{s.val}</p>
+            <p className="text-[9px] text-[var(--text3)] uppercase tracking-wider mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{s.key}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── BATTERY TAB ── */
+function TabBattery({ result, startBat }: { result: RoutePlanResult; startBat: number }) {
+  const { battery } = result;
+  const remaining = Math.max(0, battery.remainingBattery);
+  const isOk = battery.willReachDestination;
+
+  return (
+    <div className="p-5 flex flex-col gap-5">
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5">
+        <SectionTitle>Battery Prediction</SectionTitle>
+        <BatteryGauge before={startBat} after={battery.remainingBattery} used={battery.totalBatteryUsed} willReach={battery.willReachDestination} safetyBuffer={battery.safetyBuffer} />
+      </div>
+
+      {/* Verdict */}
+      <div className={`rounded-xl p-4 flex items-start gap-3 border ${isOk ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50"}`}>
+        <span className="text-xl">{isOk ? "✅" : "⚠️"}</span>
+        <div>
+          <p className="font-semibold text-sm" style={{ color: isOk ? "#16a34a" : "#dc2626" }}>
+            {isOk ? `Arriving with ${remaining.toFixed(0)}% battery` : `${Math.abs(battery.remainingBattery).toFixed(0)}% short — charge stop needed`}
+          </p>
+          <p className="text-[11px] text-[var(--text3)] mt-1" style={{ fontFamily: "var(--font-mono)" }}>
+            {isOk ? `Safety buffer: ${battery.safetyBuffer}%` : "Please charge before departing or stop en route"}
+          </p>
+        </div>
+      </div>
+
+      {/* Impact factors */}
+      <div>
+        <SectionTitle>Impact Factors</SectionTitle>
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl divide-y divide-[var(--border)]">
+          {[
+            { icon: "🌤", label: "Weather",   val: battery.breakdowns.weatherImpact },
+            { icon: "🏎", label: "Speed",     val: battery.breakdowns.speedImpact },
+            { icon: "⛰", label: "Elevation", val: battery.breakdowns.elevationImpact },
+          ].map(row => (
+            <div key={row.label} className="flex items-center gap-3 px-4 py-3">
+              <span>{row.icon}</span>
+              <span className="text-sm text-[var(--text2)] flex-1">{row.label}</span>
+              <span className="text-sm font-semibold text-red-500" style={{ fontFamily: "var(--font-mono)" }}>{row.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed" style={{ fontFamily: "var(--font-mono)" }}>
+        💡 Avoid draining below 15% — real usable range ends ~5km past the 15% mark.
+      </div>
+    </div>
+  );
+}
+
+/* ── CHARGERS TAB ── */
+function TabChargers({ result }: { result: RoutePlanResult }) {
+  const { chargingStations, battery } = result;
+
+  return (
+    <div className="p-5 flex flex-col gap-5">
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle>{battery.willReachDestination ? "Nearby Chargers" : "Required Stops"}</SectionTitle>
+          <span className="text-[10px] bg-[var(--green-dim)] text-[var(--green)] border border-[var(--green-border)] px-2 py-0.5 rounded-full" style={{ fontFamily: "var(--font-mono)" }}>
+            {chargingStations.length} found
+          </span>
+        </div>
+
+        {chargingStations.length === 0 ? (
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 text-center text-[var(--text3)] text-sm">
+            No charging stations found along this route.
+          </div>
+        ) : (
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl divide-y divide-[var(--border)]">
+            {chargingStations.map((s, i) => (
+              <div key={s.id} className="p-4 flex gap-3">
+                <div className={`mt-0.5 px-2 py-1 rounded-md text-[10px] font-semibold flex-shrink-0 ${s.fastCharge ? "bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800" : "bg-[var(--surface2)] text-[var(--text3)] border border-[var(--border)]"}`} style={{ fontFamily: "var(--font-mono)" }}>
+                  {s.fastCharge ? "⚡ DC" : "AC"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text)] truncate">{s.name}</p>
+                  {s.address && <p className="text-[11px] text-[var(--text3)] mt-0.5 truncate" style={{ fontFamily: "var(--font-mono)" }}>{s.address}</p>}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--surface2)] border border-[var(--border)] text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>🔌 {s.connectors} ports</span>
+                    {s.powerKw && <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--green-dim)] border border-[var(--green-border)] text-[var(--green)]" style={{ fontFamily: "var(--font-mono)" }}>{s.powerKw}kW</span>}
+                    {s.network && <span className="text-[10px] px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 text-purple-600 dark:text-purple-400" style={{ fontFamily: "var(--font-mono)" }}>{s.network}</span>}
+                    {s.batteryAtPoint !== undefined && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-blue-600 dark:text-blue-400" style={{ fontFamily: "var(--font-mono)" }}>🔋 {s.batteryAtPoint.toFixed(0)}% on arrival</span>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {!battery.willReachDestination && (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl p-3 text-[11px] text-red-600 dark:text-red-400 leading-relaxed" style={{ fontFamily: "var(--font-mono)" }}>
+          ⚠️ A charging stop is required to complete this journey.
         </div>
-      </Card>
+      )}
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════
-   TAB: BATTERY
-════════════════════════════════════════════════════ */
-function TabBattery({ result, startBat }: { result: RoutePlanResult; startBat: number }) {
-  const { battery } = result;
-  const remaining   = Math.max(0, battery.remainingBattery);
-  const isOk        = battery.willReachDestination;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
-      <Card>
-        <CardHeader title="Battery prediction" />
-        <div style={{ padding: 14 }}>
-          <BatteryGauge
-            before={startBat}
-            after={battery.remainingBattery}
-            used={battery.totalBatteryUsed}
-            willReach={battery.willReachDestination}
-            safetyBuffer={battery.safetyBuffer}
-          />
-        </div>
-      </Card>
-
-      {/* Verdict */}
-      <Card>
-        <CardHeader title="Reach verdict" />
-        <div style={{ padding: 14 }}>
-          <div style={{
-            borderRadius: "var(--radius-xs)", padding: 12,
-            display: "flex", alignItems: "flex-start", gap: 10,
-            background: isOk ? "var(--green-dim)" : "rgba(220,38,38,.07)",
-            border: `1px solid ${isOk ? "var(--green-border)" : "rgba(220,38,38,.2)"}`,
-          }}>
-            <span style={{ fontSize: 20, flexShrink: 0 }}>{isOk ? "✅" : "⚠️"}</span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: isOk ? "var(--green)" : "#dc2626" }}>
-                {isOk ? `Arriving with ${remaining.toFixed(0)}% battery` : `Not enough charge — ${Math.abs(battery.remainingBattery).toFixed(0)}% short`}
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)", marginTop: 3, lineHeight: 1.4 }}>
-                {isOk ? `Safety buffer: ${battery.safetyBuffer}% · Trip looks good!` : "Please charge before departing or find a stop en route"}
-              </div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Impact factors */}
-      <Card>
-        <CardHeader title="Battery impact factors" />
-        <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            { icon: "🌤", label: "Weather",   val: battery.breakdowns.weatherImpact,   color: "#dc2626" },
-            { icon: "🏎", label: "Speed",     val: battery.breakdowns.speedImpact,     color: "#d97706" },
-            { icon: "⛰", label: "Elevation", val: battery.breakdowns.elevationImpact, color: "var(--text3)" },
-          ].map(row => (
-            <div key={row.label} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 11 }}>
-                <span style={{ color: "var(--text2)" }}>{row.icon} {row.label}</span>
-                <span style={{ color: row.color }}>{row.val}</span>
-              </div>
-              <div style={{ height: 4, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{
-                  width: `${Math.min(100, parseInt(row.val) * 3 || 5)}%`,
-                  height: "100%", background: row.color, borderRadius: 2,
-                }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title="Usable range note" />
-        <div style={{
-          margin: "0 14px 14px",
-          background: "rgba(220,38,38,.05)", border: "1px solid rgba(220,38,38,.15)",
-          borderRadius: "var(--radius-xs)", padding: "10px 12px",
-          fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text3)", lineHeight: 1.6,
-        }}>
-          Real usable range: only ~5km past 15% mark. Avoid draining below 15% to protect cell longevity.
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════
-   TAB: CHARGERS
-════════════════════════════════════════════════════ */
-function TabChargers({ result }: { result: RoutePlanResult }) {
-  const { chargingStations, battery } = result;
-  const fastCount = chargingStations.filter(s => s.fastCharge).length;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
-      <Card>
-        <CardHeader
-          title={battery.willReachDestination ? "Nearby charging stations" : "Charging stops needed"}
-          right={
-            <div style={{
-              fontFamily: "var(--font-mono)", fontSize: 10,
-              background: "var(--green-dim)", color: "var(--green)",
-              border: "1px solid var(--green-border)", padding: "2px 8px", borderRadius: 4,
-            }}>{chargingStations.length} Found</div>
-          }
-        />
-        <div style={{ padding: "10px 14px" }}>
-          {chargingStations.length === 0 ? (
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text3)", textAlign: "center", padding: "20px 0" }}>
-              No charging stations found along this route.
-            </div>
-          ) : chargingStations.map((s, i) => (
-            <div key={s.id} style={{
-              display: "flex", gap: 10, alignItems: "flex-start",
-              padding: "10px 0", borderBottom: i < chargingStations.length - 1 ? "1px solid var(--border)" : "none",
-            }}>
-              <div style={{
-                padding: "3px 7px", borderRadius: 4, fontSize: 10, fontFamily: "var(--font-mono)",
-                fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, marginTop: 1,
-                background: s.fastCharge ? "rgba(217,119,6,.1)" : "var(--surface2)",
-                color: s.fastCharge ? "#d97706" : "var(--text3)",
-                border: `1px solid ${s.fastCharge ? "rgba(217,119,6,.2)" : "var(--border)"}`,
-              }}>
-                {s.fastCharge ? "⚡ DC" : "AC"}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{s.name}</div>
-                {s.address && <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{s.address}</div>}
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-                  <span style={{ padding: "2px 7px", borderRadius: 4, fontSize: 10, fontFamily: "var(--font-mono)", background: "var(--surface2)", color: "var(--text3)", border: "1px solid var(--border)" }}>
-                    🔌 {s.connectors} port{s.connectors !== 1 ? "s" : ""}
-                  </span>
-                  {s.powerKw && <span style={{ padding: "2px 7px", borderRadius: 4, fontSize: 10, fontFamily: "var(--font-mono)", background: "var(--green-dim)", color: "var(--green)", border: "1px solid var(--green-border)" }}>{s.powerKw}kW</span>}
-                  {s.network && <span style={{ padding: "2px 7px", borderRadius: 4, fontSize: 10, fontFamily: "var(--font-mono)", background: "rgba(124,58,237,.08)", color: "#7c3aed", border: "1px solid rgba(124,58,237,.2)" }}>{s.network}</span>}
-                  {s.batteryAtPoint !== undefined && (
-                    <span style={{ padding: "2px 7px", borderRadius: 4, fontSize: 10, fontFamily: "var(--font-mono)", background: "rgba(37,99,235,.08)", color: "#2563eb", border: "1px solid rgba(37,99,235,.2)" }}>
-                      🔋 {s.batteryAtPoint.toFixed(0)}% on arrival
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Alerts */}
-      <Card>
-        <CardHeader title="Live alerts" />
-        <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ background: "var(--green-dim)", border: "1px solid var(--green-border)", borderRadius: "var(--radius-xs)", padding: "9px 12px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#166534", lineHeight: 1.5 }}>
-            Auto-stop added at first charger — on your eco route at 47%.
-          </div>
-          {!battery.willReachDestination && (
-            <div style={{ background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.2)", borderRadius: "var(--radius-xs)", padding: "9px 12px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#dc2626", lineHeight: 1.5 }}>
-              ⚠️ Battery insufficient — a charging stop is required to complete this journey.
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════
-   TAB: AI ANALYSIS
-════════════════════════════════════════════════════ */
+/* ── AI TAB ── */
 function TabAI({ result }: { result: RoutePlanResult }) {
-  const { aiInsights, battery } = result;
+  const { aiInsights } = result;
   if (!aiInsights) return (
-    <div style={{ padding: 32, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text3)" }}>
-      AI analysis not available for this trip.
-    </div>
+    <div className="p-8 text-center text-[var(--text3)] text-sm">AI analysis not available.</div>
   );
 
-  const VERDICT_CONFIG: Record<string, { icon: string; label: string; color: string; bg: string; border: string }> = {
-    go:             { icon: "✅", label: "Good to Go",            color: "var(--green)", bg: "var(--green-dim)", border: "var(--green-border)" },
-    charge_first:   { icon: "🔋", label: "Charge Before Leaving", color: "#d97706", bg: "rgba(217,119,6,.08)", border: "rgba(217,119,6,.25)" },
-    charge_enroute: { icon: "⚡", label: "Charge En Route",       color: "#dc2626", bg: "rgba(220,38,38,.08)", border: "rgba(220,38,38,.25)" },
-  };
-  const verdict = VERDICT_CONFIG[aiInsights.verdict] ?? VERDICT_CONFIG.go;
+  const verdictCfg = {
+    go:             { icon: "✅", label: "Good to Go",            color: "#16a34a", cls: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" },
+    charge_first:   { icon: "🔋", label: "Charge Before Leaving", color: "#d97706", cls: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50" },
+    charge_enroute: { icon: "⚡", label: "Charge En Route",       color: "#dc2626", cls: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50" },
+  }[aiInsights.verdict] ?? { icon: "✅", label: "Good to Go", color: "#16a34a", cls: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
-
+    <div className="p-5 flex flex-col gap-5">
       {/* Trip score */}
-      <Card>
-        <CardHeader title="Trip score" />
-        <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 16 }}>
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+        <SectionTitle>Trip Score</SectionTitle>
+        <div className="flex items-center gap-4">
           <div>
-            <div style={{ fontSize: 48, fontWeight: 800, color: "var(--green)", lineHeight: 1 }}>B+</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text3)", marginTop: 4 }}>78 / 100</div>
+            <p className="text-5xl font-bold text-[var(--green)]" style={{ fontFamily: "var(--font-sans)" }}>B+</p>
+            <p className="text-[11px] text-[var(--text3)] mt-1" style={{ fontFamily: "var(--font-mono)" }}>78 / 100</p>
           </div>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)", marginBottom: 2 }}>Smooth rider +4 pts from last trip</div>
+          <div className="flex-1 flex flex-col gap-2">
             {[
-              { label: "Speed control", pct: 82, color: "var(--green)" },
+              { label: "Speed control", pct: 82, color: "#16a34a" },
               { label: "Braking",       pct: 65, color: "#d97706" },
               { label: "Regen use",     pct: 78, color: "#2563eb" },
             ].map(row => (
-              <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 11, color: "var(--text2)", minWidth: 90 }}>{row.label}</div>
-                <div style={{ flex: 1, height: 4, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ width: `${row.pct}%`, height: "100%", background: row.color, borderRadius: 2 }} />
+              <div key={row.label} className="flex items-center gap-2">
+                <span className="text-[11px] text-[var(--text2)] w-24 flex-shrink-0">{row.label}</span>
+                <div className="flex-1 h-1.5 bg-[var(--surface2)] border border-[var(--border)] rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
                 </div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)", minWidth: 24, textAlign: "right" }}>{row.pct}</div>
+                <span className="text-[10px] text-[var(--text3)] w-6 text-right" style={{ fontFamily: "var(--font-mono)" }}>{row.pct}</span>
               </div>
             ))}
           </div>
         </div>
-      </Card>
+      </div>
 
-      {/* AI verdict */}
-      <Card accent="rgba(124,58,237,.2)">
-        <CardHeader
-          title="AI Analysis · Claude"
-          right={
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              padding: "3px 9px", borderRadius: 20, fontSize: 9, fontFamily: "var(--font-mono)",
-              background: "rgba(124,58,237,.1)", color: "#7c3aed",
-              border: "1px solid rgba(124,58,237,.2)", textTransform: "uppercase", letterSpacing: ".06em",
-            }}>🤖 Claude</div>
-          }
-        />
-        <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Verdict banner */}
-          <div style={{ background: verdict.bg, border: `1px solid ${verdict.border}`, borderRadius: "var(--radius-xs)", padding: 12, display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <span style={{ fontSize: 20, flexShrink: 0 }}>{verdict.icon}</span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: verdict.color }}>{verdict.label}</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)", marginTop: 3, lineHeight: 1.4 }}>{aiInsights.summary}</div>
-            </div>
-          </div>
+      {/* Verdict */}
+      <div className={`rounded-xl p-4 flex items-start gap-3 border ${verdictCfg.cls}`}>
+        <span className="text-xl">{verdictCfg.icon}</span>
+        <div>
+          <p className="font-semibold text-sm" style={{ color: verdictCfg.color }}>{verdictCfg.label}</p>
+          <p className="text-[11px] text-[var(--text3)] mt-1 leading-relaxed" style={{ fontFamily: "var(--font-mono)" }}>{aiInsights.summary}</p>
+        </div>
+      </div>
 
-          {/* Optimal speed */}
-          <div style={{ background: "var(--green-dim)", border: "1px solid var(--green-border)", borderRadius: "var(--radius-xs)", padding: "10px 12px", display: "flex", alignItems: "center", gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: "var(--green)", lineHeight: 1, letterSpacing: -1 }}>{aiInsights.optimalSpeed}</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--green)", opacity: .6, textTransform: "uppercase", letterSpacing: ".05em" }}>km/h optimal</div>
-            </div>
-            <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text2)", lineHeight: 1.5 }}>
-              Drive at {aiInsights.optimalSpeed} km/h for maximum range efficiency
-            </div>
-          </div>
+      {/* Optimal speed */}
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-4">
+        <div className="w-14 h-14 rounded-xl bg-[var(--green-dim)] border border-[var(--green-border)] flex flex-col items-center justify-center flex-shrink-0">
+          <p className="text-lg font-bold text-[var(--green)] leading-none">{aiInsights.optimalSpeed}</p>
+          <p className="text-[8px] text-[var(--green)] opacity-60 uppercase mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>km/h</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>Optimal Speed</p>
+          <p className="text-sm text-[var(--text2)] mt-0.5">Drive at {aiInsights.optimalSpeed} km/h for max range efficiency</p>
+        </div>
+      </div>
 
-          {/* Charging advice */}
-          <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-xs)", padding: "10px 12px" }}>
-            <Label>⚡ Charging strategy</Label>
-            <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.5, marginTop: 4 }}>{aiInsights.chargingAdvice}</div>
-          </div>
+      {/* Charging advice */}
+      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+        <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider mb-2" style={{ fontFamily: "var(--font-mono)" }}>⚡ Charging Strategy</p>
+        <p className="text-sm text-[var(--text2)] leading-relaxed">{aiInsights.chargingAdvice}</p>
+      </div>
 
-          {/* Tips */}
-          <Label>Smart tips</Label>
+      {/* Tips */}
+      <div>
+        <SectionTitle>Smart Tips</SectionTitle>
+        <div className="flex flex-col gap-2">
           {aiInsights.tips.map((tip, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, padding: "8px 10px", borderRadius: "var(--radius-xs)", background: "var(--surface2)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text2)", lineHeight: 1.5, alignItems: "flex-start" }}>
-              <div style={{
-                width: 18, height: 18, borderRadius: 4, background: "var(--green-dim)", border: "1px solid var(--green-border)",
-                color: "var(--green)", fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700,
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1,
-              }}>{i + 1}</div>
-              {tip}
+            <div key={i} className="flex items-start gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
+              <div className="w-5 h-5 rounded-md bg-[var(--green-dim)] border border-[var(--green-border)] text-[var(--green)] flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{i+1}</div>
+              <p className="text-sm text-[var(--text2)] leading-relaxed">{tip}</p>
             </div>
           ))}
         </div>
-      </Card>
-
-      {/* Style loss */}
-      <Card accent="rgba(220,38,38,.2)">
-        <CardHeader title="Driving style loss" />
-        <div style={{ padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 36, fontWeight: 800, color: "#dc2626", letterSpacing: -2 }}>−18%</div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text3)", lineHeight: 1.5 }}>
-            Aggressive acceleration detected. Smooth starts could recover ~26km of range.
-          </div>
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }
