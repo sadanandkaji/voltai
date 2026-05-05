@@ -6,9 +6,11 @@ import { GeoLocation, ChargingStation } from "../lib/types";
 interface Step { instruction: string; distanceText: string; durationText: string; maneuver: string | null; }
 interface RouteData { distanceText: string; durationText: string; encodedPolyline: string; steps: Step[]; }
 interface Props {
-  origin: GeoLocation; destination: GeoLocation;
+  origin: GeoLocation;
+  destination: GeoLocation;
   chargingStations?: ChargingStation[];
-  batteryPercent?: number; remainingBattery?: number;
+  batteryPercent?: number;
+  remainingBattery?: number;
 }
 
 function decodePolyline(encoded: string): { lat: number; lng: number }[] {
@@ -57,12 +59,17 @@ function arrow(m: string | null) {
 declare global { interface Window { google: typeof google } }
 
 export default function RouteMap({
-  origin, destination, chargingStations = [],
-  batteryPercent = 80, remainingBattery = 50,
+  origin,
+  destination,
+  chargingStations = [],
+  batteryPercent = 80,
+  remainingBattery = 50,
 }: Props) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef    = useRef<google.maps.Map | null>(null);
   const polyRefs  = useRef<google.maps.Polyline[]>([]);
+  const markerRefs = useRef<google.maps.Marker[]>([]);
+  const infoWindows = useRef<google.maps.InfoWindow[]>([]);
   const animRef   = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [routeData, setRouteData] = useState<RouteData | null>(null);
@@ -70,8 +77,9 @@ export default function RouteMap({
   const [error,     setError]     = useState<string | null>(null);
   const [showSteps, setShowSteps] = useState(false);
   const [sdkReady,  setSdkReady]  = useState(false);
+  const [activeStation, setActiveStation] = useState<ChargingStation | null>(null);
 
-  /* Load SDK */
+  /* Load Google Maps SDK */
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
     if (!apiKey) { setError("Add NEXT_PUBLIC_GOOGLE_MAPS_KEY to .env.local"); setLoading(false); return; }
@@ -117,71 +125,147 @@ export default function RouteMap({
 
   useEffect(() => { if (sdkReady) fetchRoute(); }, [sdkReady, fetchRoute]);
 
-  /* Draw route */
+  /* Draw route + ALL charging station markers */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !routeData || !window.google?.maps) return;
+
+    // Clear previous overlays
     polyRefs.current.forEach(p => p.setMap(null)); polyRefs.current = [];
+    markerRefs.current.forEach(m => m.setMap(null)); markerRefs.current = [];
+    infoWindows.current.forEach(iw => iw.close()); infoWindows.current = [];
     if (animRef.current) clearInterval(animRef.current);
 
     const path = decodePolyline(routeData.encodedPolyline);
+
+    // ── Draw route polylines ──────────────────────────────────────────────
     const glow = new window.google.maps.Polyline({ path, map, strokeColor: "#22c55e", strokeOpacity: 0.15, strokeWeight: 20 });
     const main = new window.google.maps.Polyline({
       path, map, strokeColor: "#22c55e", strokeOpacity: 0.95, strokeWeight: 5,
-      icons: [{ icon: { path: window.google.maps.SymbolPath.FORWARD_OPEN_ARROW, scale: 3, strokeColor: "#22c55e", strokeWeight: 2 }, repeat: "110px" }],
+      icons: [{
+        icon: { path: window.google.maps.SymbolPath.FORWARD_OPEN_ARROW, scale: 3, strokeColor: "#22c55e", strokeWeight: 2 },
+        repeat: "110px",
+      }],
     });
     const dot = new window.google.maps.Polyline({
       path, map, strokeOpacity: 0,
-      icons: [{ icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#4ade80", fillOpacity: 1, strokeColor: "#22c55e", strokeWeight: 2 }, offset: "0%" }],
+      icons: [{
+        icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#4ade80", fillOpacity: 1, strokeColor: "#22c55e", strokeWeight: 2 },
+        offset: "0%",
+      }],
     });
     polyRefs.current = [glow, main, dot];
+
+    // Animate the dot along the route
     let offset = 0;
     animRef.current = setInterval(() => {
       offset = (offset + 0.35) % 100;
       const icons = dot.get("icons"); icons[0].offset = offset + "%"; dot.set("icons", icons);
     }, 40);
 
-    const pin = (emoji: string, bg: string, shadow: string) =>
+    // ── Pin SVG builder ───────────────────────────────────────────────────
+    const pinSvg = (emoji: string, bg: string, shadow: string) =>
       "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
         `<svg width="54" height="66" viewBox="0 0 54 66" xmlns="http://www.w3.org/2000/svg">
           <defs><filter id="f"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="${shadow}" flood-opacity="0.55"/></filter></defs>
           <path filter="url(#f)" d="M27 3C15.4 3 6 12.4 6 24c0 17.4 21 39 21 39s21-21.6 21-39C48 12.4 38.6 3 27 3z" fill="${bg}"/>
           <circle cx="27" cy="24" r="11" fill="#060c0a"/>
           <text x="27" y="29.5" text-anchor="middle" font-size="14">${emoji}</text>
-        </svg>`);
+        </svg>`
+      );
 
-    new window.google.maps.Marker({ position: { lat: origin.lat, lng: origin.lon }, map, zIndex: 10,
-      icon: { url: pin("🚗","#22c55e","#22c55e"), scaledSize: new window.google.maps.Size(54, 66), anchor: new window.google.maps.Point(27, 64) },
+    // ── Origin & Destination markers ────────────────────────────────────
+    const originMk = new window.google.maps.Marker({
+      position: { lat: origin.lat, lng: origin.lon }, map, zIndex: 10,
+      icon: { url: pinSvg("🚗", "#22c55e", "#22c55e"), scaledSize: new window.google.maps.Size(54, 66), anchor: new window.google.maps.Point(27, 64) },
     });
-    new window.google.maps.Marker({ position: { lat: destination.lat, lng: destination.lon }, map, zIndex: 10,
-      icon: { url: pin("🏁","#f97316","#f97316"), scaledSize: new window.google.maps.Size(54, 66), anchor: new window.google.maps.Point(27, 64) },
+    const destMk = new window.google.maps.Marker({
+      position: { lat: destination.lat, lng: destination.lon }, map, zIndex: 10,
+      icon: { url: pinSvg("🏁", "#f97316", "#f97316"), scaledSize: new window.google.maps.Size(54, 66), anchor: new window.google.maps.Point(27, 64) },
     });
+    markerRefs.current.push(originMk, destMk);
 
-    chargingStations.forEach(s => {
-      const svg = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
-        `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
-          <defs><filter id="g"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#3b82f6" flood-opacity="0.6"/></filter></defs>
-          <circle filter="url(#g)" cx="21" cy="21" r="17" fill="#1d4ed8" stroke="#3b82f6" stroke-width="2.5"/>
-          <text x="21" y="27" text-anchor="middle" font-size="17">⚡</text>
-        </svg>`);
-      const mk = new window.google.maps.Marker({ position: { lat: s.lat, lng: s.lon }, map, zIndex: 5,
-        icon: { url: svg, scaledSize: new window.google.maps.Size(42, 42), anchor: new window.google.maps.Point(21, 21) },
+    // ── Charging station markers (ALWAYS shown, all stations) ───────────
+    chargingStations.forEach((s, idx) => {
+      const isFast = s.fastCharge;
+      const markerColor = isFast ? "#f59e0b" : "#3b82f6";
+      const markerGlow  = isFast ? "#f59e0b" : "#3b82f6";
+
+      const chargeSvg = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+        `<svg width="48" height="58" viewBox="0 0 48 58" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="g${idx}">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="${markerGlow}" flood-opacity="0.7"/>
+            </filter>
+          </defs>
+          <path filter="url(#g${idx})"
+            d="M24 2C13.5 2 5 10.5 5 21c0 15.4 19 35 19 35s19-19.6 19-35C43 10.5 34.5 2 24 2z"
+            fill="${markerColor}" stroke="${isFast ? '#fbbf24' : '#60a5fa'}" stroke-width="1.5"/>
+          <circle cx="24" cy="21" r="10" fill="#060c0a"/>
+          <text x="24" y="26.5" text-anchor="middle" font-size="13">${isFast ? "⚡" : "🔌"}</text>
+          ${isFast ? `<circle cx="38" cy="8" r="6" fill="#22c55e" stroke="#060c0a" stroke-width="1.5"/>
+          <text x="38" y="12" text-anchor="middle" font-size="8" fill="#060c0a" font-weight="bold">DC</text>` : ""}
+        </svg>`
+      );
+
+      const mk = new window.google.maps.Marker({
+        position: { lat: s.lat, lng: s.lon },
+        map,
+        zIndex: 8,
+        title: s.name,
+        icon: {
+          url: chargeSvg,
+          scaledSize: new window.google.maps.Size(48, 58),
+          anchor: new window.google.maps.Point(24, 56),
+        },
       });
-      const iw = new window.google.maps.InfoWindow({ content:
-        `<div style="background:#0d1710;color:#f0faf2;padding:12px 14px;border-radius:10px;border:1px solid rgba(34,197,94,0.2);font-family:sans-serif;min-width:190px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">⚡ ${s.name}</div>
-          ${s.address ? `<div style="font-size:11px;color:#4d7a5c;margin-bottom:8px;">${s.address}</div>` : ""}
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <span style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);padding:2px 8px;border-radius:10px;font-size:11px;">${s.connectors} ports</span>
-            ${s.fastCharge ? '<span style="background:rgba(34,197,94,0.1);color:#4ade80;border:1px solid rgba(34,197,94,0.2);padding:2px 8px;border-radius:10px;font-size:11px;">Fast Charge</span>' : ""}
+
+      // Rich InfoWindow with station details
+      const iw = new window.google.maps.InfoWindow({
+        content: `
+          <div style="
+            background: #0d1710;
+            color: #f0faf2;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(34,197,94,0.2);
+            font-family: monospace;
+            min-width: 210px;
+            max-width: 260px;
+          ">
+            <div style="font-family: sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 5px; color: #f0faf2;">
+              ${isFast ? "⚡" : "🔌"} ${s.name}
+            </div>
+            ${s.address ? `<div style="font-size: 11px; color: #4d7a5c; margin-bottom: 10px; line-height: 1.4;">${s.address}</div>` : ""}
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+              <span style="background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); padding: 2px 8px; border-radius: 10px; font-size: 11px;">
+                🔌 ${s.connectors} port${s.connectors !== 1 ? "s" : ""}
+              </span>
+              ${isFast ? `<span style="background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); padding: 2px 8px; border-radius: 10px; font-size: 11px;">⚡ Fast DC</span>` : ""}
+              ${s.powerKw ? `<span style="background: rgba(34,197,94,0.08); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); padding: 2px 8px; border-radius: 10px; font-size: 11px;">${s.powerKw}kW</span>` : ""}
+            </div>
+            ${s.network ? `<div style="font-size: 10px; color: #4d7a5c; text-transform: uppercase; letter-spacing: 0.08em;">Network: ${s.network}</div>` : ""}
+            ${s.source === "tavily" ? `<div style="font-size: 10px; color: #2a5a3a; margin-top: 4px;">📡 AI-sourced via Tavily</div>` : `<div style="font-size: 10px; color: #2a5a3a; margin-top: 4px;">📍 OpenChargeMap</div>`}
           </div>
-        </div>` });
-      mk.addListener("click", () => iw.open({ map, anchor: mk }));
+        `,
+      });
+
+      // Close others when opening a new one
+      mk.addListener("click", () => {
+        infoWindows.current.forEach(w => w.close());
+        iw.open({ map, anchor: mk });
+      });
+
+      markerRefs.current.push(mk);
+      infoWindows.current.push(iw);
     });
 
+    // ── Fit map bounds to show route + all stations ───────────────────────
     const bounds = new window.google.maps.LatLngBounds();
     path.forEach(p => bounds.extend(p));
+    chargingStations.forEach(s => bounds.extend({ lat: s.lat, lng: s.lon }));
     map.fitBounds(bounds, { top: 80, bottom: 80, left: 60, right: 60 });
+
     return () => { if (animRef.current) clearInterval(animRef.current); };
   }, [routeData, sdkReady, origin, destination, chargingStations]);
 
@@ -193,13 +277,12 @@ export default function RouteMap({
     <div
       className="relative rounded-2xl overflow-hidden"
       style={{
-        height: 480,
+        height: 500,
         border: "1px solid rgba(34,197,94,0.14)",
         boxShadow: "0 32px 100px rgba(0,0,0,0.65)",
         background: "#060c0a",
       }}
     >
-      {/* Map */}
       <div ref={mapDivRef} className="w-full h-full" />
 
       {/* Loading overlay */}
@@ -269,7 +352,7 @@ export default function RouteMap({
         </div>
       )}
 
-      {/* Battery arcs */}
+      {/* Battery arcs (top-right) */}
       <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-2xl px-3 py-2"
         style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.15)" }}>
         <BatArc pct={batteryPercent} label="Start" color="#60a5fa" />
@@ -277,26 +360,39 @@ export default function RouteMap({
         <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} />
       </div>
 
-      {/* Bottom bar */}
+      {/* Bottom legend bar */}
       <div className="absolute bottom-3 left-3 right-3 z-10 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 rounded-xl px-3 py-2"
+        <div className="flex items-center gap-3 rounded-xl px-3 py-2 flex-wrap"
           style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.15)" }}>
-          <div className="w-2 h-2 rounded-sm bg-green-500" />
-          <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Route</span>
+          {/* Route legend */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-1.5 rounded-full bg-green-500" />
+            <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Route</span>
+          </div>
           <span className="text-xs">🚗</span>
           <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Start</span>
           <span className="text-xs">🏁</span>
           <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>End</span>
-          {chargingStations.length > 0 && <>
-            <span className="text-xs">⚡</span>
-            <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              {chargingStations.length} Charger{chargingStations.length > 1 ? "s" : ""}
-            </span>
-          </>}
+          {chargingStations.length > 0 && (
+            <>
+              <div className="w-px h-3" style={{ background: "var(--border)" }} />
+              {/* Fast charge legend */}
+              <span className="text-xs">⚡</span>
+              <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "#fbbf24" }}>
+                {chargingStations.filter(s => s.fastCharge).length} Fast DC
+              </span>
+              {/* Standard charge legend */}
+              <span className="text-xs">🔌</span>
+              <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "#60a5fa" }}>
+                {chargingStations.filter(s => !s.fastCharge).length} AC
+              </span>
+            </>
+          )}
         </div>
+
         {routeData && routeData.steps.length > 0 && (
           <button onClick={() => setShowSteps(v => !v)}
-            className="rounded-xl px-4 py-2 font-mono text-xs text-green-400 cursor-pointer transition-colors"
+            className="rounded-xl px-4 py-2 font-mono text-xs text-green-400 cursor-pointer transition-colors flex-shrink-0"
             style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.2)" }}>
             {showSteps ? "Hide ▲" : "Directions ▼"}
           </button>

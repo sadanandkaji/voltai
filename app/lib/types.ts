@@ -1,3 +1,5 @@
+// app/lib/types.ts
+
 export interface GeoLocation {
   lat: number;
   lon: number;
@@ -10,6 +12,7 @@ export interface WeatherData {
   precipitation: number;
   weatherFactor: number;
   conditions: string;
+  source?: "google" | "open-meteo";
 }
 
 export interface BatteryPrediction {
@@ -22,6 +25,7 @@ export interface BatteryPrediction {
     weatherImpact: string;
     speedImpact: string;
     elevationImpact: string;
+    loadImpact?: string;
   };
 }
 
@@ -32,13 +36,25 @@ export interface RouteInfo {
 }
 
 export interface ChargingStation {
-  id: number;
+  id: number | string;
   name: string;
   address: string;
   lat: number;
   lon: number;
   connectors: number;
   fastCharge: boolean;
+  powerKw?: number;
+  network?: string;
+  source?: "tavily" | "openchargemap";
+}
+
+export interface AIInsights {
+  summary: string;
+  verdict: "go" | "charge_first" | "charge_enroute";
+  tips: string[];
+  optimalSpeed: number;
+  chargingAdvice: string;
+  riskLevel: "low" | "medium" | "high";
 }
 
 export interface RoutePlanResult {
@@ -48,6 +64,7 @@ export interface RoutePlanResult {
   weather: WeatherData;
   battery: BatteryPrediction;
   chargingStations: ChargingStation[];
+  aiInsights?: AIInsights;
 }
 
 export interface RouteFormData {

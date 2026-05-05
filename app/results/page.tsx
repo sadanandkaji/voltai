@@ -6,14 +6,15 @@ import BatteryGauge from "../components/BatteryGauge";
 import WeatherCard from "../components/WeatherCard";
 import RangeWarning from "../components/RangeWarning";
 import ChargingStopCard from "../components/ChargingStopCard";
+import AIInsightsCard from "../components/AIInsightsCard";
 import { RoutePlanResult } from "../lib/types";
 
 const RouteMap = dynamic(() => import("../components/RouteMap"), { ssr: false });
 
-function ResultCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function ResultCard({ title, icon, children, accent }: { title: string; icon: string; children: React.ReactNode; accent?: string }) {
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--border)", background: "rgba(34,197,94,0.02)" }}>
+    <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card-bg)", border: `1px solid ${accent || "var(--border)"}` }}>
+      <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${accent || "var(--border)"}`, background: accent ? `${accent}08` : "rgba(34,197,94,0.02)" }}>
         <span className="text-base">{icon}</span>
         <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>{title}</span>
       </div>
@@ -41,10 +42,11 @@ export default function ResultsPage() {
     );
   }
 
-  const { origin, destination, route, weather, battery, chargingStations } = result;
+  const { origin, destination, route, weather, battery, chargingStations, aiInsights } = result;
   const originCity   = origin.display_name.split(",")[0];
   const destCity     = destination.display_name.split(",")[0];
   const startBattery = Math.round(battery.totalBatteryUsed + Math.max(0, battery.remainingBattery));
+  const fastChargers = chargingStations.filter(s => s.fastCharge).length;
 
   return (
     <main className="min-h-screen pb-16 relative">
@@ -71,6 +73,27 @@ export default function ResultsPage() {
           <span className="font-syne font-bold text-sm text-orange-400 truncate">{destCity}</span>
         </div>
 
+        {/* Weather pill */}
+        <div
+          className="hidden sm:flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px]"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
+        >
+          <span>{weather.conditions === "Ideal" ? "☀️" : weather.conditions.includes("Rain") ? "🌧️" : weather.conditions.includes("Cold") ? "❄️" : "🌡️"}</span>
+          <span>{weather.temperature}°C</span>
+        </div>
+
+        {/* Charger count pill */}
+        {chargingStations.length > 0 && (
+          <div
+            className="hidden sm:flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px]"
+            style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", color: "#60a5fa" }}
+          >
+            <span>⚡</span>
+            <span>{chargingStations.length} chargers on map</span>
+          </div>
+        )}
+
+        {/* Go/stop badge */}
         <div
           className="flex-shrink-0 rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-wider"
           style={{
@@ -83,7 +106,7 @@ export default function ResultsPage() {
         </div>
       </nav>
 
-      {/* Map */}
+      {/* Map — always shows ALL charging stations as pins */}
       <div className="px-4 pt-4 relative z-10">
         <RouteMap
           origin={origin}
@@ -93,6 +116,25 @@ export default function ResultsPage() {
           remainingBattery={battery.remainingBattery}
         />
       </div>
+
+      {/* Charging stations summary strip */}
+      {chargingStations.length > 0 && (
+        <div className="px-4 pt-3 relative z-10 max-w-5xl mx-auto">
+          <div
+            className="rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap"
+            style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.2)" }}
+          >
+            <span className="text-base">🗺️</span>
+            <span className="font-syne font-semibold text-sm" style={{ color: "#60a5fa" }}>
+              {chargingStations.length} Charging Station{chargingStations.length !== 1 ? "s" : ""} Mapped Along Route
+            </span>
+            <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+            <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+              {fastChargers} fast DC · {chargingStations.length - fastChargers} AC · Tap pins on map for details
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 pt-4 relative z-10 max-w-5xl mx-auto">
@@ -111,25 +153,39 @@ export default function ResultsPage() {
           <WeatherCard weather={weather} />
         </ResultCard>
 
+        {/* AI Insights — full width if present */}
+        {aiInsights && (
+          <div className="md:col-span-2">
+            <ResultCard title="AI Trip Analysis · OpenRouter" icon="🤖" accent="rgba(139,92,246,0.3)">
+              <AIInsightsCard insights={aiInsights} />
+            </ResultCard>
+          </div>
+        )}
+
         <ResultCard title="Trip Analysis" icon="📊">
           <RangeWarning battery={battery} route={route} />
         </ResultCard>
 
+        {/* Always show charging card — even if trip is OK (shows nearby chargers) */}
         {chargingStations.length > 0 && (
-          <ResultCard title="Charging Stops" icon="⚡">
-            <ChargingStopCard stations={chargingStations} />
+          <ResultCard
+            title={battery.willReachDestination ? "Nearby Charging Stations" : "Charging Stops Needed"}
+            icon="⚡"
+            accent={battery.willReachDestination ? undefined : "rgba(239,68,68,0.3)"}
+          >
+            <ChargingStopCard stations={chargingStations} willReach={battery.willReachDestination} />
           </ResultCard>
         )}
 
         <ResultCard title="Consumption Details" icon="📈">
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "Used",      value: `${battery.totalBatteryUsed}%`,         color: "#f87171" },
-              { label: "Remaining", value: `${Math.max(0, battery.remainingBattery)}%`, color: "#4ade80" },
-              { label: "Eff. Range",value: `${battery.effectiveRange}km`,           color: "#60a5fa" },
-              { label: "Buffer",    value: `${battery.safetyBuffer}%`,              color: "#a78bfa" },
-              { label: "Distance",  value: `${route.distanceKm}km`,                color: "#f59e0b" },
-              { label: "ETA",       value: `${route.durationMin}min`,              color: "#34d399" },
+              { label: "Used",       value: `${battery.totalBatteryUsed}%`,             color: "#f87171" },
+              { label: "Remaining",  value: `${Math.max(0, battery.remainingBattery)}%`, color: "#4ade80" },
+              { label: "Eff. Range", value: `${battery.effectiveRange}km`,               color: "#60a5fa" },
+              { label: "Buffer",     value: `${battery.safetyBuffer}%`,                  color: "#a78bfa" },
+              { label: "Distance",   value: `${route.distanceKm}km`,                     color: "#f59e0b" },
+              { label: "ETA",        value: `${route.durationMin}min`,                   color: "#34d399" },
             ].map((s) => (
               <div
                 key={s.label}
