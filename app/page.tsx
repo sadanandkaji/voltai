@@ -41,6 +41,9 @@ export default function HomePage() {
   const [dark, setDark] = useState(false);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
+    // Also set class for Tailwind dark: variants
+    if (dark) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
   }, [dark]);
 
   const [msgs, setMsgs] = useState<Msg[]>([
@@ -56,9 +59,9 @@ export default function HomePage() {
   const [preset, setPreset]   = useState("Custom");
   const [loading, setLoading] = useState(false);
 
-  const [result, setResult]       = useState<RoutePlanResult | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("navigate");
+  const [result, setResult]             = useState<RoutePlanResult | null>(null);
+  const [panelOpen, setPanelOpen]       = useState(false);
+  const [activeTab, setActiveTab]       = useState("navigate");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -128,20 +131,36 @@ ${willReach
     ? Math.round(result.battery.totalBatteryUsed + Math.max(0, result.battery.remainingBattery))
     : form.batteryPercent;
 
+  /* ── Layout logic:
+       • Before result: chat fills the screen, centred column
+       • After result:  sidebar (360px) | right panel (flex-1), with slide-in animation
+  ── */
   return (
-<div className="relative flex h-screen overflow-hidden bg-[var(--bg)] transition-all duration-500">
-      {/* ── CHAT SIDEBAR ── */}
-      <div className={`
-        flex flex-col h-full flex-shrink-0 transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
-        border-r border-[var(--border)]
-     ${panelOpen
-  ? sidebarCollapsed
-    ? "w-0 overflow-hidden border-none"
-    : "w-[360px]"
-  : "w-full max-w-[640px] mx-auto border-none justify-center"
-}
-      `}>
-        {/* Header */}
+    <div
+      className="relative flex h-screen overflow-hidden transition-colors duration-500"
+      style={{ background: "var(--bg)" }}
+    >
+      {/* ════════════════════════════════════════════════
+          CHAT SIDEBAR
+          Pre-result  → full width, centred
+          Post-result → 360px fixed sidebar, collapsible
+      ════════════════════════════════════════════════ */}
+      <div
+        className="flex flex-col h-full flex-shrink-0 border-r border-[var(--border)] transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]"
+        style={{
+          /* When panel is NOT open: stretch to full screen, no border */
+          width: !panelOpen
+            ? "100%"
+            : sidebarCollapsed
+              ? "0px"
+              : "360px",
+          maxWidth: !panelOpen ? "640px" : undefined,
+          margin: !panelOpen ? "0 auto" : undefined,
+          borderRightColor: !panelOpen || sidebarCollapsed ? "transparent" : undefined,
+          overflow: sidebarCollapsed ? "hidden" : undefined,
+        }}
+      >
+        {/* ── Header ── */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)] flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-[var(--green)] flex items-center justify-center text-white text-sm font-bold">⚡</div>
@@ -174,19 +193,20 @@ ${willReach
           </div>
         </div>
 
-        {/* Messages */}
-<div
-  className={`flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3 ${
-    !panelOpen ? "justify-center" : ""
-  }`}
->          {msgs.map((m, i) => {
+        {/* ── Messages ── */}
+        <div
+          className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3"
+          style={{ justifyContent: !panelOpen ? "center" : "flex-start" }}
+        >
+          {msgs.map((m, i) => {
             if (m.kind === "typing") return (
-              <div key={i} className="flex items-end gap-2 animate-[fadeUp_.2s_ease]">
+              <div key={i} className="flex items-end gap-2" style={{ animation: "fadeUp .2s ease" }}>
                 <Avatar />
                 <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[4px_16px_16px_16px] px-4 py-3">
                   <div className="flex gap-1 items-center">
                     {[0, 150, 300].map(d => (
-                      <div key={d} className="w-1.5 h-1.5 rounded-full bg-[var(--text3)]" style={{ animation: `bounce 0.9s ${d}ms infinite` }} />
+                      <div key={d} className="w-1.5 h-1.5 rounded-full bg-[var(--text3)]"
+                        style={{ animation: `bounce 0.9s ${d}ms infinite` }} />
                     ))}
                   </div>
                 </div>
@@ -194,7 +214,7 @@ ${willReach
             );
 
             if (m.kind === "form") return (
-              <div key={i} className="flex items-end gap-2 animate-[fadeUp_.2s_ease]">
+              <div key={i} className="flex items-end gap-2" style={{ animation: "fadeUp .2s ease" }}>
                 <Avatar />
                 <RouteFormInline
                   form={form} setForm={setForm}
@@ -205,7 +225,7 @@ ${willReach
             );
 
             if (m.kind === "user") return (
-              <div key={i} className="flex justify-end animate-[fadeUp_.2s_ease]">
+              <div key={i} className="flex justify-end" style={{ animation: "fadeUp .2s ease" }}>
                 <div className="bg-[var(--green)] text-white rounded-[16px_16px_4px_16px] px-4 py-2.5 text-sm leading-relaxed max-w-[80%] whitespace-pre-line" style={{ fontFamily: "var(--font-sans)" }}>
                   {m.text}
                 </div>
@@ -213,7 +233,7 @@ ${willReach
             );
 
             if (m.kind === "ai") return (
-              <div key={i} className="flex items-end gap-2 animate-[fadeUp_.2s_ease]">
+              <div key={i} className="flex items-end gap-2" style={{ animation: "fadeUp .2s ease" }}>
                 <Avatar />
                 <div
                   className="bg-[var(--surface)] border border-[var(--border)] rounded-[4px_16px_16px_16px] px-4 py-2.5 text-sm leading-relaxed text-[var(--text)] max-w-[85%]"
@@ -227,7 +247,7 @@ ${willReach
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input */}
+        {/* ── Chat input ── */}
         <div className="px-4 py-3 border-t border-[var(--border)] bg-[var(--surface)] flex gap-2 items-center flex-shrink-0">
           <input
             value={chatInput}
@@ -244,14 +264,19 @@ ${willReach
         </div>
       </div>
 
-      {/* ── RIGHT PANEL ── */}
-      <div className={`
-        flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
-${panelOpen
-  ? "opacity-100 translate-x-0"
-  : "opacity-0 translate-x-8 pointer-events-none w-0"
-}      `}>
-        {/* Collapsed sidebar toggle */}
+      {/* ════════════════════════════════════════════════
+          RIGHT PANEL — slides in from right when result arrives
+      ════════════════════════════════════════════════ */}
+      <div
+        className="flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]"
+        style={{
+          opacity: panelOpen ? 1 : 0,
+          transform: panelOpen ? "translateX(0)" : "translateX(40px)",
+          pointerEvents: panelOpen ? "auto" : "none",
+          width: panelOpen ? undefined : 0,
+        }}
+      >
+        {/* Collapsed sidebar re-open button */}
         {sidebarCollapsed && (
           <button
             onClick={() => setSidebarCollapsed(false)}
@@ -259,20 +284,20 @@ ${panelOpen
           >→</button>
         )}
 
-        {/* Tab bar */}
+        {/* ── Tab bar ── */}
         <div className="flex items-center border-b border-[var(--border)] bg-[var(--surface)] px-2 flex-shrink-0 overflow-x-auto">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`
-                flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-all
-                ${activeTab === t.id
-                  ? "text-[var(--green)] border-[var(--green)]"
-                  : "text-[var(--text3)] border-transparent hover:text-[var(--text2)]"
-                }
-              `}
-              style={{ fontFamily: "var(--font-mono)" }}
+              className="flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-all"
+              style={{
+                fontFamily: "var(--font-mono)",
+                color: activeTab === t.id ? "var(--green)" : "var(--text3)",
+                borderBottomColor: activeTab === t.id ? "var(--green)" : "transparent",
+                background: "none",
+                cursor: "pointer",
+              }}
             >
               <span className="text-sm">{t.icon}</span>
               {t.label}
@@ -280,15 +305,40 @@ ${panelOpen
           ))}
         </div>
 
-        {/* Tab content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* ── Tab content ── */}
+        {/*
+          Navigate tab gets special treatment: full height, no scroll wrapper.
+          All other tabs scroll normally.
+        */}
+        <div className="flex-1 overflow-hidden relative">
           {result && (
             <>
-              {activeTab === "navigate"  && <TabNavigate  result={result} startBat={startBat} dark={dark} />}
-              {activeTab === "analytics" && <TabAnalytics result={result} />}
-              {activeTab === "battery"   && <TabBattery   result={result} startBat={startBat} />}
-              {activeTab === "chargers"  && <TabChargers  result={result} />}
-              {activeTab === "ai"        && <TabAI        result={result} />}
+              {/* NAVIGATE — map fills entire panel height */}
+              <div
+                className="absolute inset-0 transition-opacity duration-200"
+                style={{
+                  opacity: activeTab === "navigate" ? 1 : 0,
+                  pointerEvents: activeTab === "navigate" ? "auto" : "none",
+                  zIndex: activeTab === "navigate" ? 1 : 0,
+                }}
+              >
+                <TabNavigate result={result} startBat={startBat} dark={dark} />
+              </div>
+
+              {/* All other tabs — scrollable */}
+              <div
+                className="absolute inset-0 overflow-y-auto transition-opacity duration-200"
+                style={{
+                  opacity: activeTab !== "navigate" ? 1 : 0,
+                  pointerEvents: activeTab !== "navigate" ? "auto" : "none",
+                  zIndex: activeTab !== "navigate" ? 1 : 0,
+                }}
+              >
+                {activeTab === "analytics" && <TabAnalytics result={result} />}
+                {activeTab === "battery"   && <TabBattery   result={result} startBat={startBat} />}
+                {activeTab === "chargers"  && <TabChargers  result={result} />}
+                {activeTab === "ai"        && <TabAI        result={result} />}
+              </div>
             </>
           )}
         </div>
@@ -316,25 +366,20 @@ function RouteFormInline({ form, setForm, preset, setPreset, loading, onSubmit }
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[4px_16px_16px_16px] p-4 flex flex-col gap-3 w-full max-w-[300px] shadow-sm">
       <p className="text-[10px] font-semibold text-[var(--text3)] uppercase tracking-widest" style={{ fontFamily: "var(--font-mono)" }}>Plan Your Route</p>
 
-      {/* Origin */}
       <div className="flex flex-col gap-1.5">
         <label className="flex items-center gap-1.5 text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-          From
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />From
         </label>
         <input className={inp} placeholder="e.g. Bengaluru, KA" value={form.origin} onChange={e => setForm(f => ({ ...f, origin: e.target.value }))} />
       </div>
 
-      {/* Destination */}
       <div className="flex flex-col gap-1.5">
         <label className="flex items-center gap-1.5 text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-          To
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />To
         </label>
         <input className={inp} placeholder="e.g. Mysore, KA" value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} />
       </div>
 
-      {/* Battery */}
       <div>
         <div className="flex justify-between mb-1.5">
           <span className="text-[10px] text-[var(--text3)] uppercase tracking-wider" style={{ fontFamily: "var(--font-mono)" }}>Battery</span>
@@ -346,14 +391,19 @@ function RouteFormInline({ form, setForm, preset, setPreset, loading, onSubmit }
         />
       </div>
 
-      {/* Presets */}
       <div>
         <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider mb-1.5" style={{ fontFamily: "var(--font-mono)" }}>Vehicle</p>
         <div className="grid grid-cols-3 gap-1">
           {EV_PRESETS.map(p => (
             <button key={p.label} onClick={() => { setPreset(p.label); setForm(f => ({ ...f, vehicleRangeKm: p.range })); }}
-              className={`py-1.5 px-1 rounded-md text-[11px] text-center border transition-all cursor-pointer ${preset === p.label ? "border-[var(--green)] bg-[var(--green-dim)] text-[var(--green)] font-semibold" : "border-[var(--border)] bg-[var(--surface2)] text-[var(--text2)]"}`}
-              style={{ fontFamily: "var(--font-sans)" }}
+              className="py-1.5 px-1 rounded-md text-[11px] text-center border transition-all cursor-pointer"
+              style={{
+                borderColor: preset === p.label ? "var(--green)" : "var(--border)",
+                background: preset === p.label ? "var(--green-dim)" : "var(--surface2)",
+                color: preset === p.label ? "var(--green)" : "var(--text2)",
+                fontWeight: preset === p.label ? 600 : 400,
+                fontFamily: "var(--font-sans)",
+              }}
             >
               <div className="leading-tight">{p.label}</div>
               <div className="text-[9px] opacity-50 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{p.range}km</div>
@@ -382,13 +432,15 @@ function RouteFormInline({ form, setForm, preset, setPreset, loading, onSubmit }
   );
 }
 
-/* ═══════ TABS ═══════ */
+/* ═══════════════════════════════════
+   SHARED COMPONENTS
+═══════════════════════════════════ */
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
       <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider mb-2" style={{ fontFamily: "var(--font-mono)" }}>{label}</p>
-      <p className="text-2xl font-bold text-[var(--text)]" style={{ color: color || "var(--text)", fontFamily: "var(--font-sans)" }}>{value}</p>
+      <p className="text-2xl font-bold" style={{ color: color || "var(--text)", fontFamily: "var(--font-sans)" }}>{value}</p>
       {sub && <p className="text-[11px] text-[var(--text3)] mt-1" style={{ fontFamily: "var(--font-mono)" }}>{sub}</p>}
     </div>
   );
@@ -398,92 +450,134 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-[11px] font-semibold text-[var(--text3)] uppercase tracking-widest mb-3" style={{ fontFamily: "var(--font-mono)" }}>{children}</h3>;
 }
 
-/* ── NAVIGATE TAB ── */
+/* ═══════════════════════════════════
+   NAVIGATE TAB
+   Map is full-height, no card wrapper
+═══════════════════════════════════ */
 function TabNavigate({ result, startBat, dark }: { result: RoutePlanResult; startBat: number; dark: boolean }) {
   const { origin, destination, route, weather, battery, chargingStations } = result;
+  const [subTab, setSubTab] = useState<"map" | "info">("map");
 
-  const weatherIcon = weather.conditions === "Ideal" ? "☀️" : weather.conditions.includes("Rain") ? "🌧️" : weather.conditions.includes("Cold") ? "❄️" : weather.conditions.includes("Wind") ? "💨" : "🌡️";
+  const weatherIcon = weather.conditions === "Ideal" ? "☀️"
+    : weather.conditions.includes("Rain") ? "🌧️"
+    : weather.conditions.includes("Cold") ? "❄️"
+    : weather.conditions.includes("Wind") ? "💨" : "🌡️";
 
   return (
-    <div className="p-5 flex flex-col gap-5">
-      {/* Map */}
-<div
-  className="rounded-2xl overflow-hidden border border-[var(--border)]"
-  style={{ height: 460 }}
->        <RouteMap origin={origin} destination={destination} chargingStations={chargingStations} batteryPercent={startBat} remainingBattery={battery.remainingBattery} />
+    <div className="flex flex-col h-full">
+      {/* Sub-tabs: Map | Info */}
+      <div
+        className="flex gap-0 flex-shrink-0 border-b border-[var(--border)]"
+        style={{ background: "var(--surface)" }}
+      >
+        {(["map", "info"] as const).map(s => (
+          <button
+            key={s}
+            onClick={() => setSubTab(s)}
+            className="px-5 py-2.5 text-[11px] font-medium uppercase tracking-widest border-b-2 transition-all cursor-pointer"
+            style={{
+              fontFamily: "var(--font-mono)",
+              color: subTab === s ? "var(--green)" : "var(--text3)",
+              borderBottomColor: subTab === s ? "var(--green)" : "transparent",
+              background: "none",
+              marginBottom: "-1px",
+            }}
+          >
+            {s === "map" ? "🗺 Map" : "📋 Details"}
+          </button>
+        ))}
       </div>
 
-      {/* Route options */}
-      <div>
-        <SectionTitle>Route Options</SectionTitle>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Eco ⭐", dist: route.distanceKm, bat: battery.totalBatteryUsed, accent: "var(--green)" },
-            { label: "Fastest", dist: Math.round(route.distanceKm * 0.89), bat: Math.round(battery.totalBatteryUsed * 1.42) },
-            { label: "Shortest", dist: Math.round(route.distanceKm * 0.81), bat: Math.round(battery.totalBatteryUsed * 1.76) },
-          ].map(r => (
-            <div key={r.label} className={`bg-[var(--surface)] border rounded-xl p-3 ${r.accent ? "border-[var(--green)]" : "border-[var(--border)]"}`}>
-              <p className="text-[10px] font-semibold mb-1" style={{ fontFamily: "var(--font-mono)", color: r.accent || "var(--text3)" }}>{r.label}</p>
-              <p className="text-xl font-bold text-[var(--text)]">{r.dist}<span className="text-xs text-[var(--text3)] ml-0.5">km</span></p>
-              <p className="text-[11px] text-red-500 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>−{r.bat}% bat</p>
-            </div>
-          ))}
+      {/* MAP — true full height, no padding */}
+      {subTab === "map" && (
+        <div className="flex-1 overflow-hidden">
+          <RouteMap
+            origin={origin}
+            destination={destination}
+            chargingStations={chargingStations}
+            batteryPercent={startBat}
+            remainingBattery={battery.remainingBattery}
+            theme={dark ? "dark" : "light"}
+          />
         </div>
-      </div>
+      )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Predicted Range" value={`${battery.effectiveRange} km`} sub="After weather & style adjustments" />
-        <StatCard label="ETA" value={`${Math.floor(route.durationMin / 60)}h ${route.durationMin % 60}m`} sub={chargingStations.length > 0 ? "Includes charge stop" : "No charge stop needed"} />
-      </div>
-
-      {/* Weather */}
-      <div>
-        <SectionTitle>Weather Impact</SectionTitle>
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">{weatherIcon}</span>
-            <div>
-              <p className="text-sm font-semibold text-[var(--text)]">{weather.conditions}</p>
-              <p className="text-[11px] text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>
-                {Math.round((1 - weather.weatherFactor) * 100)}% range reduction
-              </p>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-lg font-bold text-[var(--green)]">{Math.round(weather.weatherFactor * 100)}%</p>
-              <p className="text-[10px] text-[var(--text3)]">efficiency</p>
+      {/* INFO — scrollable details */}
+      {subTab === "info" && (
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+          {/* Route options */}
+          <div>
+            <SectionTitle>Route Options</SectionTitle>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Eco ⭐", dist: route.distanceKm, bat: battery.totalBatteryUsed, accent: true },
+                { label: "Fastest", dist: Math.round(route.distanceKm * 0.89), bat: Math.round(battery.totalBatteryUsed * 1.42), accent: false },
+                { label: "Shortest", dist: Math.round(route.distanceKm * 0.81), bat: Math.round(battery.totalBatteryUsed * 1.76), accent: false },
+              ].map(r => (
+                <div key={r.label}
+                  className="bg-[var(--surface)] rounded-xl p-3 border"
+                  style={{ borderColor: r.accent ? "var(--green)" : "var(--border)" }}
+                >
+                  <p className="text-[10px] font-semibold mb-1" style={{ fontFamily: "var(--font-mono)", color: r.accent ? "var(--green)" : "var(--text3)" }}>{r.label}</p>
+                  <p className="text-xl font-bold text-[var(--text)]">{r.dist}<span className="text-xs text-[var(--text3)] ml-0.5">km</span></p>
+                  <p className="text-[11px] text-red-500 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>−{r.bat}% bat</p>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { val: `${weather.temperature}°C`, key: "Temp" },
-              { val: `${weather.wind_speed}km/h`, key: "Wind" },
-              { val: weather.precipitation > 0 ? `${weather.precipitation}mm` : "Dry", key: "Rain" },
-            ].map(w => (
-              <div key={w.key} className="bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-2 text-center">
-                <p className="text-sm font-bold text-[var(--text)]">{w.val}</p>
-                <p className="text-[9px] text-[var(--text3)] uppercase tracking-wider mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{w.key}</p>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard label="Predicted Range" value={`${battery.effectiveRange} km`} sub="After weather & style adjustments" />
+            <StatCard label="ETA" value={`${Math.floor(route.durationMin / 60)}h ${route.durationMin % 60}m`} sub={chargingStations.length > 0 ? "Includes charge stop" : "No charge stop needed"} />
+          </div>
+
+          {/* Weather */}
+          <div>
+            <SectionTitle>Weather Impact</SectionTitle>
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-2xl">{weatherIcon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text)]">{weather.conditions}</p>
+                  <p className="text-[11px] text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>
+                    {Math.round((1 - weather.weatherFactor) * 100)}% range reduction
+                  </p>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-lg font-bold text-[var(--green)]">{Math.round(weather.weatherFactor * 100)}%</p>
+                  <p className="text-[10px] text-[var(--text3)]">efficiency</p>
+                </div>
               </div>
-            ))}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { val: `${weather.temperature}°C`, key: "Temp" },
+                  { val: `${weather.wind_speed}km/h`, key: "Wind" },
+                  { val: weather.precipitation > 0 ? `${weather.precipitation}mm` : "Dry", key: "Rain" },
+                ].map(w => (
+                  <div key={w.key} className="bg-[var(--surface2)] border border-[var(--border)] rounded-lg p-2 text-center">
+                    <p className="text-sm font-bold text-[var(--text)]">{w.val}</p>
+                    <p className="text-[9px] text-[var(--text3)] uppercase tracking-wider mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{w.key}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <button className="w-full py-3 bg-[var(--green)] text-white rounded-xl font-bold text-sm hover:opacity-90 transition-opacity" style={{ fontFamily: "var(--font-sans)" }}>
-        Start Navigation →
-      </button>
+         
+        </div>
+      )}
     </div>
   );
 }
 
 /* ── ANALYTICS TAB ── */
 function TabAnalytics({ result }: { result: RoutePlanResult }) {
-  const { battery, route } = result;
+  const { battery } = result;
   const mfrRange = Math.round(battery.effectiveRange * 1.27);
 
   return (
     <div className="p-5 flex flex-col gap-5">
-      {/* Range reality */}
       <div>
         <SectionTitle>Range Reality Check</SectionTitle>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-4">
@@ -498,11 +592,10 @@ function TabAnalytics({ result }: { result: RoutePlanResult }) {
           </div>
         </div>
         <div className="mt-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg px-3 py-2 text-[11px] text-red-600 dark:text-red-400" style={{ fontFamily: "var(--font-mono)" }}>
-          −{mfrRange - battery.effectiveRange}km gap due to weather, style & battery age
+          −{mfrRange - battery.effectiveRange}km gap due to weather, style &amp; battery age
         </div>
       </div>
 
-      {/* Energy breakdown */}
       <div>
         <SectionTitle>Energy Breakdown</SectionTitle>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col gap-3">
@@ -523,14 +616,13 @@ function TabAnalytics({ result }: { result: RoutePlanResult }) {
         </div>
       </div>
 
-      {/* Driving style */}
       <div>
         <SectionTitle>Driving Style</SectionTitle>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col gap-3">
           {[
-            { label: "Acceleration", pct: 72, val: "−18%", color: "#dc2626" },
-            { label: "Hard braking", pct: 48, val: "−7%",  color: "#d97706" },
-            { label: "Speed consistency", pct: 85, val: "+4%", color: "#16a34a" },
+            { label: "Acceleration",      pct: 72, val: "−18%", color: "#dc2626" },
+            { label: "Hard braking",      pct: 48, val: "−7%",  color: "#d97706" },
+            { label: "Speed consistency", pct: 85, val: "+4%",  color: "#16a34a" },
           ].map(row => (
             <div key={row.label} className="flex items-center gap-3">
               <span className="text-xs text-[var(--text2)] w-32 flex-shrink-0">{row.label}</span>
@@ -543,12 +635,11 @@ function TabAnalytics({ result }: { result: RoutePlanResult }) {
         </div>
       </div>
 
-      {/* Stats grid */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { val: `${battery.totalBatteryUsed}%`, key: "Used",     color: "#dc2626" },
+          { val: `${battery.totalBatteryUsed}%`,             key: "Used",      color: "#dc2626" },
           { val: `${Math.max(0, battery.remainingBattery)}%`, key: "Remaining", color: "#16a34a" },
-          { val: `${battery.safetyBuffer}%`, key: "Buffer",   color: "#7c3aed" },
+          { val: `${battery.safetyBuffer}%`,                  key: "Buffer",    color: "#7c3aed" },
         ].map(s => (
           <div key={s.key} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center">
             <p className="text-lg font-bold" style={{ color: s.color }}>{s.val}</p>
@@ -573,7 +664,6 @@ function TabBattery({ result, startBat }: { result: RoutePlanResult; startBat: n
         <BatteryGauge before={startBat} after={battery.remainingBattery} used={battery.totalBatteryUsed} willReach={battery.willReachDestination} safetyBuffer={battery.safetyBuffer} />
       </div>
 
-      {/* Verdict */}
       <div className={`rounded-xl p-4 flex items-start gap-3 border ${isOk ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50"}`}>
         <span className="text-xl">{isOk ? "✅" : "⚠️"}</span>
         <div>
@@ -586,7 +676,6 @@ function TabBattery({ result, startBat }: { result: RoutePlanResult; startBat: n
         </div>
       </div>
 
-      {/* Impact factors */}
       <div>
         <SectionTitle>Impact Factors</SectionTitle>
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl divide-y divide-[var(--border)]">
@@ -631,9 +720,17 @@ function TabChargers({ result }: { result: RoutePlanResult }) {
           </div>
         ) : (
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl divide-y divide-[var(--border)]">
-            {chargingStations.map((s, i) => (
+            {chargingStations.map((s) => (
               <div key={s.id} className="p-4 flex gap-3">
-                <div className={`mt-0.5 px-2 py-1 rounded-md text-[10px] font-semibold flex-shrink-0 ${s.fastCharge ? "bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800" : "bg-[var(--surface2)] text-[var(--text3)] border border-[var(--border)]"}`} style={{ fontFamily: "var(--font-mono)" }}>
+                <div
+                  className="mt-0.5 px-2 py-1 rounded-md text-[10px] font-semibold flex-shrink-0"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    background: s.fastCharge ? "rgba(245,158,11,0.1)" : "var(--surface2)",
+                    color: s.fastCharge ? "#d97706" : "var(--text3)",
+                    border: `1px solid ${s.fastCharge ? "rgba(245,158,11,0.3)" : "var(--border)"}`,
+                  }}
+                >
                   {s.fastCharge ? "⚡ DC" : "AC"}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -642,9 +739,9 @@ function TabChargers({ result }: { result: RoutePlanResult }) {
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--surface2)] border border-[var(--border)] text-[var(--text3)]" style={{ fontFamily: "var(--font-mono)" }}>🔌 {s.connectors} ports</span>
                     {s.powerKw && <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--green-dim)] border border-[var(--green-border)] text-[var(--green)]" style={{ fontFamily: "var(--font-mono)" }}>{s.powerKw}kW</span>}
-                    {s.network && <span className="text-[10px] px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 text-purple-600 dark:text-purple-400" style={{ fontFamily: "var(--font-mono)" }}>{s.network}</span>}
+                    {s.network && <span className="text-[10px] px-2 py-0.5 rounded text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50" style={{ fontFamily: "var(--font-mono)" }}>{s.network}</span>}
                     {s.batteryAtPoint !== undefined && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-blue-600 dark:text-blue-400" style={{ fontFamily: "var(--font-mono)" }}>🔋 {s.batteryAtPoint.toFixed(0)}% on arrival</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50" style={{ fontFamily: "var(--font-mono)" }}>🔋 {s.batteryAtPoint.toFixed(0)}% on arrival</span>
                     )}
                   </div>
                 </div>
@@ -670,15 +767,15 @@ function TabAI({ result }: { result: RoutePlanResult }) {
     <div className="p-8 text-center text-[var(--text3)] text-sm">AI analysis not available.</div>
   );
 
-  const verdictCfg = {
+  const verdictCfg = ({
     go:             { icon: "✅", label: "Good to Go",            color: "#16a34a", cls: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" },
     charge_first:   { icon: "🔋", label: "Charge Before Leaving", color: "#d97706", cls: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50" },
     charge_enroute: { icon: "⚡", label: "Charge En Route",       color: "#dc2626", cls: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50" },
-  }[aiInsights.verdict] ?? { icon: "✅", label: "Good to Go", color: "#16a34a", cls: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" };
+  } as Record<string, { icon: string; label: string; color: string; cls: string }>)[aiInsights.verdict]
+    ?? { icon: "✅", label: "Good to Go", color: "#16a34a", cls: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50" };
 
   return (
     <div className="p-5 flex flex-col gap-5">
-      {/* Trip score */}
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
         <SectionTitle>Trip Score</SectionTitle>
         <div className="flex items-center gap-4">
@@ -704,7 +801,6 @@ function TabAI({ result }: { result: RoutePlanResult }) {
         </div>
       </div>
 
-      {/* Verdict */}
       <div className={`rounded-xl p-4 flex items-start gap-3 border ${verdictCfg.cls}`}>
         <span className="text-xl">{verdictCfg.icon}</span>
         <div>
@@ -713,7 +809,6 @@ function TabAI({ result }: { result: RoutePlanResult }) {
         </div>
       </div>
 
-      {/* Optimal speed */}
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-4">
         <div className="w-14 h-14 rounded-xl bg-[var(--green-dim)] border border-[var(--green-border)] flex flex-col items-center justify-center flex-shrink-0">
           <p className="text-lg font-bold text-[var(--green)] leading-none">{aiInsights.optimalSpeed}</p>
@@ -725,19 +820,17 @@ function TabAI({ result }: { result: RoutePlanResult }) {
         </div>
       </div>
 
-      {/* Charging advice */}
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4">
         <p className="text-[10px] text-[var(--text3)] uppercase tracking-wider mb-2" style={{ fontFamily: "var(--font-mono)" }}>⚡ Charging Strategy</p>
         <p className="text-sm text-[var(--text2)] leading-relaxed">{aiInsights.chargingAdvice}</p>
       </div>
 
-      {/* Tips */}
       <div>
         <SectionTitle>Smart Tips</SectionTitle>
         <div className="flex flex-col gap-2">
-          {aiInsights.tips.map((tip, i) => (
+          {aiInsights.tips.map((tip: string, i: number) => (
             <div key={i} className="flex items-start gap-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3">
-              <div className="w-5 h-5 rounded-md bg-[var(--green-dim)] border border-[var(--green-border)] text-[var(--green)] flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{i+1}</div>
+              <div className="w-5 h-5 rounded-md bg-[var(--green-dim)] border border-[var(--green-border)] text-[var(--green)] flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5" style={{ fontFamily: "var(--font-mono)" }}>{i + 1}</div>
               <p className="text-sm text-[var(--text2)] leading-relaxed">{tip}</p>
             </div>
           ))}

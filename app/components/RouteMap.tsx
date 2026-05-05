@@ -11,6 +11,8 @@ interface Props {
   chargingStations?: ChargingStation[];
   batteryPercent?: number;
   remainingBattery?: number;
+  /** Pass "dark" or "light" so the map tiles match the app theme */
+  theme?: "dark" | "light";
 }
 
 function decodePolyline(encoded: string): { lat: number; lng: number }[] {
@@ -28,7 +30,7 @@ function decodePolyline(encoded: string): { lat: number; lng: number }[] {
   return pts;
 }
 
-const DARK_STYLE = [
+const DARK_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: "geometry", stylers: [{ color: "#0a120e" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#4a7a5c" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#060c0a" }] },
@@ -46,6 +48,22 @@ const DARK_STYLE = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#2a5a3a" }] },
 ];
 
+// Clean white / light style — natural colours, minimal clutter
+const LIGHT_STYLE: google.maps.MapTypeStyle[] = [
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "administrative.land_parcel", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#f0f4f0" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d8e8dc" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#c8dfc8" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#a8c8a8" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#d4eaf4" }] },
+  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#f8fcf8" }] },
+  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#e4f4e4" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#4a6e54" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+];
+
 function arrowIcon(m: string | null) {
   if (!m) return "→";
   if (m.includes("left")) return "↰";
@@ -56,7 +74,6 @@ function arrowIcon(m: string | null) {
   return "→";
 }
 
-// Determine pin colour-tier based on battery annotation
 function getPinTier(s: ChargingStation): "critical" | "needed" | "info" {
   if (s.isCritical) return "critical";
   if (s.isNeeded)   return "needed";
@@ -65,8 +82,6 @@ function getPinTier(s: ChargingStation): "critical" | "needed" | "info" {
 
 function buildChargingPinSvg(s: ChargingStation, idx: number): string {
   const tier = getPinTier(s);
-
-  // Tier colour config
   const cfg = {
     critical: { fill: "#ef4444", stroke: "#fca5a5", glow: "#ef4444", badge: "🛑", label: "STOP" },
     needed:   { fill: "#f59e0b", stroke: "#fcd34d", glow: "#f59e0b", badge: "⚡", label: "CHARGE" },
@@ -83,19 +98,14 @@ function buildChargingPinSvg(s: ChargingStation, idx: number): string {
         <filter id="g${idx}">
           <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="${cfg.glow}" flood-opacity="0.8"/>
         </filter>
-        ${tier === "critical" ? `<animate attributeName="opacity" values="1;0.5;1" dur="1.2s" repeatCount="indefinite"/>` : ""}
       </defs>
-      <!-- Pin body -->
       <path filter="url(#g${idx})"
         d="M27 2C15.4 2 6 11.4 6 23c0 17.4 21 43 21 43s21-25.6 21-43C48 11.4 38.6 2 27 2z"
         fill="${cfg.fill}" stroke="${cfg.stroke}" stroke-width="1.8"/>
-      <!-- Inner circle -->
       <circle cx="27" cy="23" r="12" fill="#060c0a" opacity="0.85"/>
-      <!-- Emoji icon -->
       <text x="27" y="28" text-anchor="middle" font-size="14">${cfg.badge}</text>
       ${battBadge}
       ${tier !== "info" ? `
-      <!-- Urgency ring -->
       <circle cx="44" cy="10" r="8" fill="${cfg.fill}" stroke="#060c0a" stroke-width="1.5"/>
       <text x="44" y="14" text-anchor="middle" font-size="7" fill="#fff" font-weight="900" font-family="sans-serif">${tier === "critical" ? "!" : "GO"}</text>
       ` : ""}
@@ -112,47 +122,20 @@ function buildInfoWindowContent(s: ChargingStation): string {
   }[tier];
 
   return `
-    <div style="
-      background:#0d1710;color:#f0faf2;padding:14px 16px;border-radius:12px;
-      border:1px solid ${tierCfg.border};font-family:sans-serif;min-width:220px;max-width:270px;
-    ">
-      <!-- Tier banner -->
-      <div style="
-        background:${tierCfg.bg};color:${tierCfg.color};
-        border:1px solid ${tierCfg.border};border-radius:8px;
-        padding:4px 10px;font-size:10px;font-family:monospace;
-        text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;
-        font-weight:700;
-      ">${tierCfg.label}</div>
-
-      <!-- Station name -->
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#f0faf2;">
-        ${s.fastCharge ? "⚡" : "🔌"} ${s.name}
-      </div>
-
+    <div style="background:#0d1710;color:#f0faf2;padding:14px 16px;border-radius:12px;border:1px solid ${tierCfg.border};font-family:sans-serif;min-width:220px;max-width:270px;">
+      <div style="background:${tierCfg.bg};color:${tierCfg.color};border:1px solid ${tierCfg.border};border-radius:8px;padding:4px 10px;font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;font-weight:700;">${tierCfg.label}</div>
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:#f0faf2;">${s.fastCharge ? "⚡" : "🔌"} ${s.name}</div>
       ${s.address ? `<div style="font-size:11px;color:#4d7a5c;margin-bottom:10px;line-height:1.4;">${s.address}</div>` : ""}
-
-      <!-- Battery at this point -->
       ${s.batteryAtPoint !== undefined ? `
-      <div style="
-        background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-        border-radius:8px;padding:8px 10px;margin-bottom:10px;
-        display:flex;align-items:center;gap:8px;
-      ">
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
         <span style="font-size:16px;">🔋</span>
         <div>
           <div style="font-size:11px;color:#4d7a5c;text-transform:uppercase;letter-spacing:0.06em;font-family:monospace;">Est. battery on arrival</div>
-          <div style="font-size:16px;font-weight:800;color:${s.batteryAtPoint > 20 ? "#4ade80" : s.batteryAtPoint > 10 ? "#fbbf24" : "#f87171"};">
-            ${s.batteryAtPoint.toFixed(1)}%
-          </div>
+          <div style="font-size:16px;font-weight:800;color:${s.batteryAtPoint > 20 ? "#4ade80" : s.batteryAtPoint > 10 ? "#fbbf24" : "#f87171"};">${s.batteryAtPoint.toFixed(1)}%</div>
         </div>
       </div>` : ""}
-
-      <!-- Tags -->
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <span style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);padding:2px 8px;border-radius:10px;font-size:11px;">
-          🔌 ${s.connectors} port${s.connectors !== 1 ? "s" : ""}
-        </span>
+        <span style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);padding:2px 8px;border-radius:10px;font-size:11px;">🔌 ${s.connectors} port${s.connectors !== 1 ? "s" : ""}</span>
         ${s.fastCharge ? `<span style="background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);padding:2px 8px;border-radius:10px;font-size:11px;">⚡ Fast DC</span>` : ""}
         ${s.powerKw ? `<span style="background:rgba(34,197,94,0.08);color:#4ade80;border:1px solid rgba(34,197,94,0.2);padding:2px 8px;border-radius:10px;font-size:11px;">${s.powerKw}kW</span>` : ""}
         ${s.network ? `<span style="background:rgba(139,92,246,0.08);color:#a78bfa;border:1px solid rgba(139,92,246,0.2);padding:2px 8px;border-radius:10px;font-size:11px;">${s.network}</span>` : ""}
@@ -165,6 +148,7 @@ declare global { interface Window { google: typeof google } }
 export default function RouteMap({
   origin, destination, chargingStations = [],
   batteryPercent = 80, remainingBattery = 50,
+  theme = "dark",
 }: Props) {
   const mapDivRef  = useRef<HTMLDivElement>(null);
   const mapRef     = useRef<google.maps.Map | null>(null);
@@ -179,7 +163,9 @@ export default function RouteMap({
   const [showSteps, setShowSteps] = useState(false);
   const [sdkReady,  setSdkReady]  = useState(false);
 
-  /* Load SDK */
+  const isDark = theme === "dark";
+
+  /* ── Load SDK ───────────────────────────────────────────────────────── */
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
     if (!apiKey) { setError("Add NEXT_PUBLIC_GOOGLE_MAPS_KEY to .env.local"); setLoading(false); return; }
@@ -197,21 +183,28 @@ export default function RouteMap({
     document.head.appendChild(s);
   }, []);
 
-  /* Init map */
+  /* ── Init map ───────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!sdkReady || !mapDivRef.current || mapRef.current) return;
     mapRef.current = new window.google.maps.Map(mapDivRef.current, {
       center: { lat: (origin.lat + destination.lat) / 2, lng: (origin.lon + destination.lon) / 2 },
       zoom: 9,
-      styles: DARK_STYLE as google.maps.MapTypeStyle[],
+      styles: isDark ? DARK_STYLE : LIGHT_STYLE,
       disableDefaultUI: true,
       zoomControl: true,
       zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER },
       gestureHandling: "cooperative",
     });
-  }, [sdkReady, origin, destination]);
+  }, [sdkReady, origin, destination, isDark]);
 
-  /* Fetch route */
+  /* ── Re-apply style when theme switches ─────────────────────────────── */
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.setOptions({ styles: isDark ? DARK_STYLE : LIGHT_STYLE });
+    }
+  }, [isDark]);
+
+  /* ── Fetch route ────────────────────────────────────────────────────── */
   const fetchRoute = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -225,12 +218,11 @@ export default function RouteMap({
 
   useEffect(() => { if (sdkReady) fetchRoute(); }, [sdkReady, fetchRoute]);
 
-  /* Draw everything */
+  /* ── Draw everything ────────────────────────────────────────────────── */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !routeData || !window.google?.maps) return;
 
-    // Clear old overlays
     polyRefs.current.forEach(p => p.setMap(null)); polyRefs.current = [];
     markerRefs.current.forEach(m => m.setMap(null)); markerRefs.current = [];
     iwRefs.current.forEach(iw => iw.close()); iwRefs.current = [];
@@ -238,7 +230,7 @@ export default function RouteMap({
 
     const path = decodePolyline(routeData.encodedPolyline);
 
-    // ── Route polylines ────────────────────────────────────────────────────
+    // Route polylines
     const glow = new window.google.maps.Polyline({ path, map, strokeColor: "#22c55e", strokeOpacity: 0.15, strokeWeight: 20 });
     const main = new window.google.maps.Polyline({
       path, map, strokeColor: "#22c55e", strokeOpacity: 0.95, strokeWeight: 5,
@@ -255,7 +247,7 @@ export default function RouteMap({
       const icons = dot.get("icons"); icons[0].offset = offset + "%"; dot.set("icons", icons);
     }, 40);
 
-    // ── Origin & destination pins ──────────────────────────────────────────
+    // Origin / destination pins
     const pinSvg = (emoji: string, bg: string, shadow: string) =>
       "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
         `<svg width="54" height="66" viewBox="0 0 54 66" xmlns="http://www.w3.org/2000/svg">
@@ -272,40 +264,25 @@ export default function RouteMap({
         icon: { url: pinSvg("🏁","#f97316","#f97316"), scaledSize: new window.google.maps.Size(54,66), anchor: new window.google.maps.Point(27,64) } }),
     );
 
-    // ── Charging station pins — ALL of them, colour-coded by tier ─────────
-    // z-order: critical (15) > needed (12) > info (8)
+    // Charging station pins
     chargingStations.forEach((s, idx) => {
-      const tier    = getPinTier(s);
-      const zIndex  = tier === "critical" ? 15 : tier === "needed" ? 12 : 8;
-      const svgUrl  = buildChargingPinSvg(s, idx);
-
+      const tier   = getPinTier(s);
+      const zIndex = tier === "critical" ? 15 : tier === "needed" ? 12 : 8;
       const mk = new window.google.maps.Marker({
-        position: { lat: s.lat, lng: s.lon },
-        map,
-        zIndex,
-        title: s.name,
-        icon: {
-          url: svgUrl,
-          scaledSize: new window.google.maps.Size(54, 68),
-          anchor: new window.google.maps.Point(27, 66),
-        },
+        position: { lat: s.lat, lng: s.lon }, map, zIndex, title: s.name,
+        icon: { url: buildChargingPinSvg(s, idx), scaledSize: new window.google.maps.Size(54,68), anchor: new window.google.maps.Point(27,66) },
       });
-
       const iw = new window.google.maps.InfoWindow({ content: buildInfoWindowContent(s) });
-      mk.addListener("click", () => {
-        iwRefs.current.forEach(w => w.close());
-        iw.open({ map, anchor: mk });
-      });
-
+      mk.addListener("click", () => { iwRefs.current.forEach(w => w.close()); iw.open({ map, anchor: mk }); });
       markerRefs.current.push(mk);
       iwRefs.current.push(iw);
     });
 
-    // ── Fit bounds: route + all station pins ──────────────────────────────
+    // Fit bounds
     const bounds = new window.google.maps.LatLngBounds();
     path.forEach(p => bounds.extend(p));
     chargingStations.forEach(s => bounds.extend({ lat: s.lat, lng: s.lon }));
-    map.fitBounds(bounds, { top: 80, bottom: 80, left: 60, right: 60 });
+    map.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 });
 
     return () => { if (animRef.current) clearInterval(animRef.current); };
   }, [routeData, sdkReady, origin, destination, chargingStations]);
@@ -314,31 +291,36 @@ export default function RouteMap({
   const originCity = origin.display_name.split(",")[0];
   const destCity   = destination.display_name.split(",")[0];
 
-  const criticalCount = chargingStations.filter(s => s.isCritical).length;
-  const neededCount   = chargingStations.filter(s => s.isNeeded && !s.isCritical).length;
-  const infoCount     = chargingStations.filter(s => !s.isNeeded).length;
+  /* ── Overlay colour tokens (flips with theme) ─────────────────────── */
+  const overlayBg     = isDark ? "rgba(6,12,10,0.90)"   : "rgba(255,255,255,0.92)";
+  const overlayBorder = isDark ? "rgba(34,197,94,0.18)"  : "rgba(34,197,94,0.30)";
+  const textMuted     = isDark ? "rgba(160,210,180,0.7)" : "#6b7280";
+  const textSec       = isDark ? "#c8e6d0"               : "#374151";
 
   return (
-    <div className="relative rounded-2xl overflow-hidden"
-      style={{ height: 500, border: "1px solid rgba(34,197,94,0.14)", boxShadow: "0 32px 100px rgba(0,0,0,0.65)", background: "#060c0a" }}>
+    /* Full-height: fills whatever container the parent gives */
+    <div
+      className="relative w-full h-full overflow-hidden"
+      style={{ background: isDark ? "#060c0a" : "#f8fcf8" }}
+    >
       <div ref={mapDivRef} className="w-full h-full" />
 
       {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3"
-          style={{ background: "rgba(6,12,10,0.88)", backdropFilter: "blur(8px)" }}>
+          style={{ background: isDark ? "rgba(6,12,10,0.88)" : "rgba(248,252,248,0.88)", backdropFilter: "blur(8px)" }}>
           <div className="w-10 h-10 rounded-full border-2 border-green-500/15 border-t-green-500 animate-spin" />
-          <span className="font-mono text-xs tracking-widest" style={{ color: "var(--text-muted)" }}>Fetching route…</span>
+          <span className="font-mono text-xs tracking-widest" style={{ color: textMuted }}>Fetching route…</span>
         </div>
       )}
 
       {/* Error overlay */}
       {error && !loading && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 px-6"
-          style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(8px)" }}>
+          style={{ background: isDark ? "rgba(6,12,10,0.9)" : "rgba(248,252,248,0.9)", backdropFilter: "blur(8px)" }}>
           <div className="text-center max-w-sm">
             <div className="font-syne font-bold text-lg text-red-400 mb-2">⚠️ Map Error</div>
-            <div className="font-mono text-xs mb-4 leading-relaxed" style={{ color: "var(--text-muted)" }}>{error}</div>
+            <div className="font-mono text-xs mb-4 leading-relaxed" style={{ color: textMuted }}>{error}</div>
             <button onClick={fetchRoute} className="px-5 py-2 rounded-xl font-mono text-xs text-green-400 cursor-pointer"
               style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)" }}>
               Retry
@@ -347,112 +329,114 @@ export default function RouteMap({
         </div>
       )}
 
-      {/* Top bar */}
+      {/* Top bar — route summary only, no battery */}
       {!loading && !error && (
-        <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 pointer-events-none">
-          <div className="flex items-center gap-2 flex-1 min-w-0 rounded-full px-4 py-2"
-            style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.2)" }}>
-            <span className="font-syne font-bold text-sm text-green-400 truncate">{originCity}</span>
-            <span className="text-xs flex-shrink-0" style={{ color: "var(--text-muted)" }}>→</span>
-            <span className="font-syne font-bold text-sm text-orange-400 truncate">{destCity}</span>
+        <div className="absolute top-3 left-3 z-10 pointer-events-none">
+          <div className="flex items-center gap-2 rounded-full px-4 py-2"
+            style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
+            <span className="font-syne font-bold text-sm text-green-500 truncate max-w-[120px]">{originCity}</span>
+            <span className="text-xs flex-shrink-0" style={{ color: textMuted }}>→</span>
+            <span className="font-syne font-bold text-sm text-orange-400 truncate max-w-[120px]">{destCity}</span>
+            {routeData && (
+              <>
+                <span style={{ color: textMuted, fontSize: 10 }}>·</span>
+                <span className="font-mono text-xs whitespace-nowrap" style={{ color: textSec }}>{routeData.distanceText}</span>
+                <span style={{ color: textMuted, fontSize: 10 }}>·</span>
+                <span className="font-mono text-xs whitespace-nowrap" style={{ color: textSec }}>{routeData.durationText}</span>
+              </>
+            )}
           </div>
-          {routeData && (
-            <div className="flex gap-2 flex-shrink-0">
-              {[{ icon: "📍", text: routeData.distanceText }, { icon: "⏱", text: routeData.durationText }].map(c => (
-                <div key={c.text} className="flex items-center gap-1.5 rounded-full px-3 py-2"
-                  style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.15)" }}>
-                  <span className="text-xs">{c.icon}</span>
-                  <span className="font-mono text-xs whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{c.text}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
-      {/* Battery arcs */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-2xl px-3 py-2"
-        style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.15)" }}>
-        <BatArc pct={batteryPercent} label="Start" color="#60a5fa" />
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>→</span>
-        <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} />
-      </div>
-
-      {/* Legend bar — shows pin colour key */}
-      <div className="absolute bottom-3 left-3 right-3 z-10 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 rounded-xl px-3 py-2 flex-wrap"
-          style={{ background: "rgba(6,12,10,0.92)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.15)" }}>
-          {/* Route */}
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-1.5 rounded-full bg-green-500" />
-            <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Route</span>
-          </div>
-          <span style={{ color: "var(--text-muted)", fontSize: 10 }}>·</span>
-          <span className="text-xs">🚗</span><span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>Start</span>
-          <span className="text-xs">🏁</span><span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>End</span>
-
-          {chargingStations.length > 0 && (
-            <>
-              <div className="w-px h-3" style={{ background: "var(--border)" }} />
-              {/* Critical */}
-              {criticalCount > 0 && (
-                <div className="flex items-center gap-1">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                  <span className="font-mono text-[10px] font-bold" style={{ color: "#f87171" }}>
-                    {criticalCount} Must Stop
-                  </span>
-                </div>
-              )}
-              {/* Needed */}
-              {neededCount > 0 && (
-                <div className="flex items-center gap-1">
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                  <span className="font-mono text-[10px] font-bold" style={{ color: "#fbbf24" }}>
-                    {neededCount} Recommended
-                  </span>
-                </div>
-              )}
-              {/* Info */}
-              {infoCount > 0 && (
-                <div className="flex items-center gap-1">
-                  <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
-                  <span className="font-mono text-[10px]" style={{ color: "#60a5fa" }}>
-                    {infoCount} Nearby
-                  </span>
-                </div>
-              )}
-            </>
-          )}
+      {/* Battery arcs — top right */}
+      {!loading && !error && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-2xl px-3 py-2"
+          style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
+          <BatArc pct={batteryPercent} label="Start" color="#60a5fa" isDark={isDark} />
+          <span className="text-xs" style={{ color: textMuted }}>→</span>
+          <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} isDark={isDark} />
         </div>
+      )}
 
-        {routeData && routeData.steps.length > 0 && (
+      {/* Legend — bottom left */}
+      {!loading && !error && (
+        <div className="absolute bottom-3 left-3 z-10">
+          <div className="flex items-center gap-3 rounded-xl px-3 py-2 flex-wrap"
+            style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-1.5 rounded-full bg-green-500" />
+              <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: textMuted }}>Route</span>
+            </div>
+            <span style={{ color: textMuted, fontSize: 10 }}>·</span>
+            <span className="text-xs">🚗</span>
+            <span className="font-mono text-[10px]" style={{ color: textMuted }}>Start</span>
+            <span className="text-xs">🏁</span>
+            <span className="font-mono text-[10px]" style={{ color: textMuted }}>End</span>
+
+            {chargingStations.length > 0 && (
+              <>
+                <div className="w-px h-3" style={{ background: "rgba(34,197,94,0.2)" }} />
+                {chargingStations.filter(s => s.isCritical).length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                    <span className="font-mono text-[10px] font-bold text-red-400">
+                      {chargingStations.filter(s => s.isCritical).length} Must Stop
+                    </span>
+                  </div>
+                )}
+                {chargingStations.filter(s => s.isNeeded && !s.isCritical).length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span className="font-mono text-[10px] font-bold text-amber-400">
+                      {chargingStations.filter(s => s.isNeeded && !s.isCritical).length} Recommended
+                    </span>
+                  </div>
+                )}
+                {chargingStations.filter(s => !s.isNeeded).length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                    <span className="font-mono text-[10px] text-blue-400">
+                      {chargingStations.filter(s => !s.isNeeded).length} Nearby
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Directions toggle — bottom right */}
+      {!loading && !error && routeData && routeData.steps.length > 0 && (
+        <div className="absolute bottom-3 right-3 z-10">
           <button onClick={() => setShowSteps(v => !v)}
-            className="rounded-xl px-4 py-2 font-mono text-xs text-green-400 cursor-pointer flex-shrink-0"
-            style={{ background: "rgba(6,12,10,0.9)", backdropFilter: "blur(14px)", border: "1px solid rgba(34,197,94,0.2)" }}>
+            className="rounded-xl px-4 py-2 font-mono text-xs text-green-500 cursor-pointer"
+            style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
             {showSteps ? "Hide ▲" : "Directions ▼"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Turn-by-turn drawer */}
       {showSteps && routeData && (
         <div className="absolute bottom-0 left-0 right-0 z-30 flex flex-col max-h-[52%]"
-          style={{ background: "rgba(8,15,10,0.97)", backdropFilter: "blur(18px)", borderTop: "1px solid rgba(34,197,94,0.15)" }}>
+          style={{ background: isDark ? "rgba(8,15,10,0.97)" : "rgba(255,255,255,0.97)", backdropFilter: "blur(18px)", borderTop: `1px solid ${overlayBorder}` }}>
           <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-            style={{ borderBottom: "1px solid rgba(34,197,94,0.1)" }}>
-            <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Turn-by-Turn</span>
-            <button onClick={() => setShowSteps(false)} className="font-mono text-xs cursor-pointer" style={{ color: "var(--text-muted)", background: "none", border: "none" }}>✕</button>
+            style={{ borderBottom: `1px solid ${overlayBorder}` }}>
+            <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: textMuted }}>Turn-by-Turn</span>
+            <button onClick={() => setShowSteps(false)} className="font-mono text-xs cursor-pointer" style={{ color: textMuted, background: "none", border: "none" }}>✕</button>
           </div>
           <div className="overflow-y-auto">
             {routeData.steps.map((s, i) => (
-              <div key={i} className="flex gap-3 items-start px-4 py-3" style={{ borderBottom: "1px solid rgba(34,197,94,0.06)" }}>
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-sm text-green-400 font-mono mt-0.5"
+              <div key={i} className="flex gap-3 items-start px-4 py-3" style={{ borderBottom: `1px solid ${overlayBorder}` }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-sm text-green-500 font-mono mt-0.5"
                   style={{ background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)" }}>
                   {arrowIcon(s.maneuver)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-syne font-semibold text-xs leading-snug" style={{ color: "#c8e6d0" }}>{s.instruction}</div>
-                  <div className="font-mono text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>{s.distanceText} · {s.durationText}</div>
+                  <div className="font-syne font-semibold text-xs leading-snug" style={{ color: isDark ? "#c8e6d0" : "#1a2e1e" }}>{s.instruction}</div>
+                  <div className="font-mono text-[10px] mt-1" style={{ color: textMuted }}>{s.distanceText} · {s.durationText}</div>
                 </div>
               </div>
             ))}
@@ -463,8 +447,9 @@ export default function RouteMap({
   );
 }
 
-function BatArc({ pct, label, color }: { pct: number; label: string; color: string }) {
+function BatArc({ pct, label, color, isDark }: { pct: number; label: string; color: string; isDark: boolean }) {
   const r = 17, circ = 2 * Math.PI * r, fill = (pct / 100) * circ;
+  const textMuted = isDark ? "rgba(160,210,180,0.7)" : "#6b7280";
   return (
     <div className="flex flex-col items-center gap-0.5">
       <div className="relative w-10 h-10">
@@ -478,7 +463,7 @@ function BatArc({ pct, label, color }: { pct: number; label: string; color: stri
           <span className="font-syne font-extrabold text-[11px]" style={{ color }}>{pct.toFixed(0)}%</span>
         </div>
       </div>
-      <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{label}</span>
+      <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: textMuted }}>{label}</span>
     </div>
   );
 }
