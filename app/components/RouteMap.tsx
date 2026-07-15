@@ -169,9 +169,9 @@ export default function RouteMap({
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
     if (!apiKey) { setError("Add NEXT_PUBLIC_GOOGLE_MAPS_KEY to .env.local"); setLoading(false); return; }
-    if (window.google?.maps) { setSdkReady(true); return; }
+if (window.google?.maps?.Map) { setSdkReady(true); return; }
     if (document.getElementById("gm-sdk")) {
-      const t = setInterval(() => { if (window.google?.maps) { clearInterval(t); setSdkReady(true); } }, 80);
+      const t = setInterval(() => { if (window.google?.maps?.Map) { clearInterval(t); setSdkReady(true); } }, 80);
       return () => clearInterval(t);
     }
     const cb = "__gmReady_" + Math.random().toString(36).slice(2);
@@ -195,10 +195,10 @@ export default function RouteMap({
   styles: isDark ? DARK_STYLE : LIGHT_STYLE,
   disableDefaultUI: true,
   zoomControl: true,
-  zoomControlOptions: {
-    position: window.google.maps.ControlPosition.TOP_RIGHT,
-  },
-  gestureHandling: "cooperative",
+zoomControlOptions: {
+  position: 3, // ControlPosition.TOP_RIGHT = 3, avoids enum timing issue
+},
+gestureHandling: "cooperative",
 });
   }, [sdkReady, origin, destination, isDark]);
 
