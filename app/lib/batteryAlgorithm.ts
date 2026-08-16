@@ -1,3 +1,4 @@
+//app\lib\batteryAlgorithm.ts
 export interface BatteryInput {
   distanceKm: number;
   batteryPercent: number;

@@ -1,3 +1,4 @@
+//app\lib\weatherFactors.ts
 export interface WeatherFactorBreakdown {
   tempFactor: number;
   windFactor: number;

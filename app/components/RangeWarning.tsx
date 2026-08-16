@@ -1,11 +1,17 @@
+//app\components\RangeWarning.tsx
 "use client";
-import { useEffect, useState } from "react";
-import { BatteryPrediction, RouteInfo } from "../lib/types";
+import { useState } from "react";
+import { BatteryPrediction, RouteInfo, GeoLocation } from "../lib/types";
 import { formatDuration, formatDistance } from "../lib/routeUtils";
 
-interface Props { battery: BatteryPrediction; route: RouteInfo; }
+interface Props {
+  battery: BatteryPrediction;
+  route: RouteInfo;
+  origin: GeoLocation;
+  destination: GeoLocation;
+}
 
-export default function RangeWarning({ battery, route }: Props) {
+export default function RangeWarning({ battery, route, origin, destination }: Props) {
   const remaining = Math.max(0, battery.remainingBattery);
   const isOk = battery.willReachDestination;
 
@@ -22,78 +28,58 @@ export default function RangeWarning({ battery, route }: Props) {
     { label: "⛰️ Elevation", value: battery.breakdowns.elevationImpact },
   ];
 
-  const [voiceReady, setVoiceReady] = useState(false);
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [voiceError, setVoiceError]     = useState<string | null>(null);
 
-  useEffect(() => {
-    const initVoice = async () => {
-      try {
-        await window.Audio.prototype.play;
-        setVoiceReady(true);
-      } catch (err) {
-        console.error("Browser doesn't support Web Audio API", err);
-      }
-    };
-    initVoice();
-  }, []);
+  function buildSummaryText(): string {
+    let text = `Your trip from ${origin.display_name} to ${destination.display_name} is `;
+    text += isOk ? `looking good! You'll arrive with around ${remaining.toFixed(0)}% battery remaining. ` : "a bit tricky. ";
 
-  const playVoice = async (text: string) => {
-    if (!voiceReady) return;
-    
-    const apiKey = "fbe8b3e9cc1ea10e8789945dec87deb919d335c6bc20062ce8af60237b94cf70";
-    const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel (US English)
-    
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_monolingual_v1",
-        voice_settings: {
-          stability: 0.75,
-          similarity_boost: 0.75,
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("Failed to synthesize speech", await res.text());
-      return;
+    if (!isOk) {
+      text += `You're predicted to be ${Math.abs(remaining).toFixed(0)}% short on charge. `;
+      text += "I recommend charging up before you leave or finding a stop along the way. ";
     }
 
-    const audio = new Audio(URL.createObjectURL(await res.blob()));
-    audio.play();
-  };
+    text += `The total distance is ${formatDistance(route.distanceKm)}, `;
+    text += `and your ETA is ${formatDuration(route.durationMin)}. `;
 
-  useEffect(() => {
-    const readSummary = async () => {
-      let text = `Your trip from ${route.origin.display_name} to ${route.destination.display_name} is `;
-      text += isOk ? `looking good! You'll arrive with around ${remaining.toFixed(0)}% battery remaining. ` : "a bit tricky. ";
-      
-      if (!isOk) {
-        text += `You're predicted to be ${Math.abs(remaining).toFixed(0)}% short on charge. `;
-        text += "I recommend charging up before you leave or finding a stop along the way. ";
+    text += "A few things impacting your battery: ";
+    breakdowns.forEach((b) => {
+      if (!b.value.startsWith("0%")) {
+        text += `${b.label} ${b.value}, `;
       }
+    });
 
-      text += `The total distance is ${formatDistance(route.distanceKm)}, `;
-      text += `and your ETA is ${formatDuration(route.durationMin)}. `;
-      
-      text += "A few things impacting your battery: ";
-      breakdowns.forEach(b => {
-        if (!b.value.startsWith("0%")) {
-          text += `${b.label} ${b.value}, `;
-        }
+    text += isOk ? "But overall, you should be all set. Safe travels!" : "So plan accordingly and charge up when you can. You got this!";
+    return text;
+  }
+
+  // Calls a server-side TTS route rather than hitting ElevenLabs (or any
+  // provider) directly from the browser — the real API key lives only in
+  // that route's server environment (e.g. process.env.ELEVENLABS_API_KEY),
+  // never in client-shipped code. This route doesn't exist yet in the
+  // files you've shared — implement app/api/tts/route.ts to proxy the
+  // request server-side before wiring this up in production.
+  async function playVoiceSummary() {
+    setVoiceLoading(true);
+    setVoiceError(null);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: buildSummaryText() }),
       });
-      
-      text += isOk ? "But overall, you should be all set. Safe travels!" : "So plan accordingly and charge up when you can. You got this!";
-
-      await playVoice(text);
-    };
-
-    if (voiceReady) readSummary();
-  }, [voiceReady, isOk, remaining, route, breakdowns]);
+      if (!res.ok) throw new Error("Voice summary unavailable right now.");
+      const blob = await res.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      await audio.play();
+    } catch (err: any) {
+      console.error("Voice summary failed:", err);
+      setVoiceError(err.message || "Couldn't play voice summary.");
+    } finally {
+      setVoiceLoading(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -149,7 +135,7 @@ export default function RangeWarning({ battery, route }: Props) {
         }}
       >
         <span className="text-2xl flex-shrink-0 mt-0.5">{isOk ? "✅" : "⚠️"}</span>
-        <div>
+        <div className="flex-1">
           <div className="font-syne font-bold text-sm" style={{ color: "var(--text-primary)" }}>
             {isOk
               ? `Arriving with ${remaining.toFixed(0)}% battery`
@@ -162,6 +148,26 @@ export default function RangeWarning({ battery, route }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Voice summary — opt-in, not auto-played */}
+      <button
+        onClick={playVoiceSummary}
+        disabled={voiceLoading}
+        className="w-full rounded-xl py-2.5 flex items-center justify-center gap-2 font-mono text-xs uppercase tracking-widest transition-opacity disabled:opacity-60"
+        style={{ background: "var(--input-bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+      >
+        {voiceLoading ? (
+          <>
+            <span className="w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+            Loading voice summary…
+          </>
+        ) : (
+          <>🔊 Play voice summary</>
+        )}
+      </button>
+      {voiceError && (
+        <div className="font-mono text-[11px]" style={{ color: "#f87171" }}>{voiceError}</div>
+      )}
     </div>
   );
 }

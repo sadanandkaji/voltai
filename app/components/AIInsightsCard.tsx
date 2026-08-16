@@ -1,3 +1,4 @@
+//app\components\AIInsightsCard.tsx
 "use client";
 import { AIInsights } from "../lib/types";
 

@@ -1,3 +1,4 @@
+//app\components\WeatherCard.tsx
 "use client";
 import { WeatherData } from "../lib/types";
 

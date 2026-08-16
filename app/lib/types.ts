@@ -45,7 +45,7 @@ export interface ChargingStation {
   fastCharge: boolean;
   powerKw?: number;
   network?: string;
-  source?: "tavily" | "openchargemap";
+  source?: "websearch" | "provider" | "openchargemap";
   // Battery-aware annotation fields (set by route-plan API)
   batteryAtPoint?: number;  // estimated battery % when arriving at this station
   isNeeded?: boolean;       // true = driver SHOULD stop here based on battery
@@ -70,6 +70,8 @@ export interface RoutePlanResult {
   battery: BatteryPrediction;
   chargingStations: ChargingStation[];
   aiInsights?: AIInsights;
+  savedRouteId: string | null;
+  creditsRemaining: number;
 }
 
 export interface RouteFormData {

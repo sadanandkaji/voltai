@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Syne, JetBrains_Mono } from "next/font/google";
+// app/layout.tsx
+import Providers from "./providers";
 import "./globals.css";
 
 const syne = Syne({
@@ -19,17 +21,16 @@ export const metadata: Metadata = {
   description: "Intelligent EV range planning with real-time battery predictions",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+
+
+
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${syne.variable} ${jetbrainsMono.variable} h-full antialiased`}
-    >
-      <body className="h-full overflow-hidden">{children}</body>
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

@@ -1,9 +1,23 @@
+//app\components\ChargingStopCard.tsx
 "use client";
 import { ChargingStation } from "../lib/types";
 
 interface Props {
   stations: ChargingStation[];
   willReach?: boolean;
+}
+
+function sourceBadge(source: ChargingStation["source"]): string {
+  switch (source) {
+    case "openchargemap":
+      return "📍 OCM";
+    case "websearch":
+      return "🌐 Web";
+    case "provider":
+      return "🔌 Network";
+    default:
+      return "📍 Unknown";
+  }
 }
 
 export default function ChargingStopCard({ stations, willReach = false }: Props) {
@@ -106,7 +120,7 @@ export default function ChargingStopCard({ stations, willReach = false }: Props)
             {/* Source badge */}
             <div className="flex-shrink-0 text-right">
               <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                {s.source === "tavily" ? "📡 AI" : "📍 OCM"}
+                {sourceBadge(s.source)}
               </span>
             </div>
           </div>

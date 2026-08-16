@@ -1,0 +1,204 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUTH — NextAuth (Google) + Prisma adapter models
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+
+  credits Int @default(100)
+
+  accounts    Account[]
+  sessions    Session[]
+  vehicles    Vehicle[]
+  savedRoutes SavedRoute[]
+  creditLogs  CreditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// APP DATA — vehicles, saved trips, charging stops
+// ─────────────────────────────────────────────────────────────────────────
+
+model Vehicle {
+  id        String  @id @default(cuid())
+  userId    String
+  label     String
+  rangeKm   Int
+  isPreset  Boolean @default(false)
+  isDefault Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SavedRoute {
+  id     String @id @default(cuid())
+  userId String
+
+  originName String
+  originLat  Float
+  originLon  Float
+  destName   String
+  destLat    Float
+  destLon    Float
+
+  batteryPercent Int
+  vehicleRangeKm Int
+
+  distanceKm     Float
+  durationMin    Float
+  elevationGainM Float
+
+  weatherTemp   Float?
+  weatherWind   Float?
+  weatherRain   Float?
+  weatherFactor Float?
+  weatherLabel  String?
+
+  totalBatteryUsed     Float
+  remainingBattery     Float
+  effectiveRange       Int
+  willReachDestination Boolean
+  safetyBuffer         Int
+
+  aiSummary        String? @db.Text
+  aiVerdict        String?
+  aiChargingAdvice String? @db.Text
+  aiOptimalSpeed   Int?
+  aiRiskLevel      String?
+
+  chargingStations ChargingStopSnapshot[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model ChargingStopSnapshot {
+  id           String @id @default(cuid())
+  savedRouteId String
+
+  externalId String?
+  name       String
+  address    String?
+  lat        Float
+  lon        Float
+  connectors Int
+  fastCharge Boolean @default(false)
+  powerKw    Float?
+  network    String?
+  source     String?
+
+  batteryAtPoint Float?
+  isNeeded       Boolean @default(false)
+  isCritical     Boolean @default(false)
+  routeFraction  Float?
+
+  savedRoute SavedRoute @relation(fields: [savedRouteId], references: [id], onDelete: Cascade)
+
+  @@index([savedRouteId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CREDITS
+// ─────────────────────────────────────────────────────────────────────────
+
+model CreditLog {
+  id           String   @id @default(cuid())
+  userId       String
+  amount       Int
+  reason       String
+  balanceAfter Int
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CACHES — persistent geocode + charging-station search caches, so repeat
+// lookups (e.g. "Bengaluru" appearing on almost every trip) are answered
+// from Postgres instead of hitting Nominatim / AI / web search every time,
+// and survive server restarts / serverless cold starts (unlike an
+// in-memory Map).
+// ─────────────────────────────────────────────────────────────────────────
+
+model GeocodeCache {
+  id          String   @id @default(cuid())
+  query       String   @unique // lowercased, trimmed input address
+  lat         Float
+  lon         Float
+  displayName String
+  source      String // "direct" | "ai-full" | "ai-short" | "ai-area"
+  createdAt   DateTime @default(now())
+
+  @@index([query])
+}
+
+model StationSearchCache {
+  id        String   @id @default(cuid())
+  locality  String   @unique // lowercased, trimmed locality name
+  data      Json // array of station objects
+  createdAt DateTime @default(now())
+
+  @@index([locality])
+}
