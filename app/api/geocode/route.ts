@@ -63,8 +63,12 @@ async function tryNominatim(query: string) {
   }
 }
 
-function chunkFallback<T>(arr: T[]): T[] {
-  return arr.filter(Boolean);
+// Type-guard filter: this is what actually lets TypeScript narrow
+// (string | null)[] -> string[]. A plain `.filter(Boolean)` removes the
+// null values at runtime but TS can't see that unless the predicate is
+// a type guard (`x is NonNullable<T>`), so we spell it out explicitly.
+function chunkFallback<T>(arr: T[]): NonNullable<T>[] {
+  return arr.filter((x): x is NonNullable<T> => Boolean(x));
 }
 
 async function tryNominatimCascade(

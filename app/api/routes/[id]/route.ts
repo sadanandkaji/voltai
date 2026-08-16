@@ -5,15 +5,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
   const userId = (session.user as any).id as string;
+  const { id } = await params;
 
   const route = await prisma.savedRoute.findFirst({
-    where: { id: params.id, userId }, // scoped to the owner — no cross-user access
+    where: { id, userId }, // scoped to the owner — no cross-user access
     include: { chargingStations: true },
   });
 
@@ -24,15 +25,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ route });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
   const userId = (session.user as any).id as string;
+  const { id } = await params;
 
   const route = await prisma.savedRoute.findFirst({
-    where: { id: params.id, userId },
+    where: { id, userId },
     select: { id: true },
   });
 
@@ -41,7 +43,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 
   // chargingStations cascade-delete automatically (onDelete: Cascade in schema)
-  await prisma.savedRoute.delete({ where: { id: params.id } });
+  await prisma.savedRoute.delete({ where: { id } });
 
   return NextResponse.json({ success: true });
 }
