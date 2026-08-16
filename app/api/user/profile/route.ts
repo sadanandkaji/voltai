@@ -5,7 +5,7 @@ import { authOptions } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
 const STARTING_CREDITS = 100;
-const CREDITS_PER_TRIP = 5;
+const CREDITS_PER_TRIP = 50;
 
 export async function GET() {
   const session = await getServerSession(authOptions);
