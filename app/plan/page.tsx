@@ -1,8 +1,9 @@
 // app/plan/page.tsx
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import { RouteFormData, RoutePlanResult } from "../lib/types";
 import { Msg, EV_PRESETS, TABS, isInvalidLocation } from "../lib/planHelpers";
@@ -126,10 +127,17 @@ export default function PlanPage() {
     return null;
   }
 
-  return <PlanPageContent />;
+  return (
+    <Suspense fallback={null}>
+      <PlanPageContent />
+    </Suspense>
+  );
 }
 
 function PlanPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -164,6 +172,16 @@ function PlanPageContent() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
+
+  // Deep-link support: /plan?trip=<id> (used by the History page) opens
+  // that saved trip directly, then strips the query param from the URL.
+  useEffect(() => {
+    const tripId = searchParams.get("trip");
+    if (!tripId) return;
+    loadHistoryRoute(tripId);
+    router.replace("/plan");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   /* ── Calculate ──────────────────────────────────────────────────────── */
   async function handleCalculate() {
