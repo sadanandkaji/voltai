@@ -38,7 +38,7 @@ const STEPS = [
 const STATS = [
   { value: "20+", label: "trip plans per free account" },
   { value: "100%", label: "real charger data, not guesses" },
-  { value: "5", label: "credits per trip plan" },
+  { value: "50", label: "credits per trip plan" },
 ];
 
 const THEME_KEY = "voltiq-theme";
