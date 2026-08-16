@@ -1,0 +1,150 @@
+/* app/styles/responsive.css
+   Mobile responsiveness layer for VoltIQ.
+   The rest of the app is styled with inline style objects (desktop-first).
+   Rather than rewrite every component to CSS-in-JS, this file adds a small
+   set of class hooks that components opt into (e.g. className="vq-grid-3")
+   and overrides them at narrow viewports. Import once in app/layout.tsx. */
+
+:root {
+  --vq-header-h: 56px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* History sidebar → becomes a slide-in drawer under 860px                */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .vq-history-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    z-index: 220;
+    height: 100dvh !important;
+    transform: translateX(-104%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
+  }
+  .vq-history-sidebar.vq-open {
+    transform: translateX(0);
+  }
+}
+
+.vq-sidebar-scrim {
+  display: none;
+}
+@media (max-width: 860px) {
+  .vq-sidebar-scrim.vq-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 210;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    animation: vq-fade-in 0.2s ease;
+  }
+}
+
+@keyframes vq-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Hamburger toggle — only shown on mobile                                */
+/* ---------------------------------------------------------------------- */
+.vq-mobile-menu-btn {
+  display: none;
+}
+@media (max-width: 860px) {
+  .vq-mobile-menu-btn {
+    display: flex !important;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Plan page chrome                                                       */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .vq-route-form-inline {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .vq-tab-bar {
+    padding: 0 2px !important;
+  }
+  .vq-tab-bar button {
+    padding: 10px 11px !important;
+    font-size: 11px !important;
+  }
+  .vq-tab-label {
+    display: none;
+  }
+  .vq-chat-brand-text {
+    display: none;
+  }
+  .vq-header-credits-label {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .vq-tab-bar button {
+    padding: 10px 8px !important;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Reusable responsive grids                                              */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .vq-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 520px) {
+  .vq-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+  .vq-grid-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 380px) {
+  .vq-grid-3,
+  .vq-grid-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Profile page                                                           */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .vq-profile-identity {
+    flex-direction: column !important;
+    text-align: center !important;
+    align-items: center !important;
+    gap: 14px !important;
+  }
+  .vq-profile-stats {
+    grid-template-columns: 1fr !important;
+  }
+  .vq-profile-back-label {
+    display: none;
+  }
+  .vq-profile-container {
+    padding: 20px 14px 48px !important;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* General small-screen niceties                                          */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  html, body {
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}

@@ -100,7 +100,7 @@ export default function TabAnalytics({ result }: { result: RoutePlanResult }) {
       {/* Consumption grid */}
       <div>
         <SectionTitle>Consumption Details</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+        <div className="vq-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
           {[
             { val: `${battery.totalBatteryUsed}%`, key: "Used", color: "#dc2626" },
             { val: `${Math.max(0, battery.remainingBattery)}%`, key: "Remaining", color: "#16a34a" },

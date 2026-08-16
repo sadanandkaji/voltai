@@ -26,16 +26,17 @@ export default function RouteFormInline({
     background: "var(--surface2)",
     border: "1px solid var(--border)",
     borderRadius: 8,
-    padding: "8px 10px",
+    padding: "10px 12px",
     fontSize: 13,
     fontFamily: "var(--font-sans)",
     color: "var(--text)",
     outline: "none",
-    transition: "border-color .15s",
+    transition: "border-color .15s, box-shadow .15s",
   };
 
   return (
     <div
+      className="vq-route-form-inline"
       style={{
         background: "var(--surface)",
         border: "1px solid var(--border)",
@@ -249,7 +250,7 @@ export default function RouteFormInline({
         disabled={loading || !form.origin || !form.destination}
         style={{
           width: "100%",
-          padding: "10px 0",
+          padding: "12px 0",
           background: loading || !form.origin || !form.destination ? "var(--border)" : "var(--green)",
           color: loading || !form.origin || !form.destination ? "var(--text3)" : "#fff",
           border: "none",

@@ -4,7 +4,7 @@
 import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const FEATURES = [
   {
@@ -41,10 +41,31 @@ const STATS = [
   { value: "5", label: "credits per trip plan" },
 ];
 
+const THEME_KEY = "voltiq-theme";
+
 export default function LandingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [starting, setStarting] = useState(false);
+  const [dark, setDark] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Restore saved theme on mount (defaults to dark, matching the app shell).
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(THEME_KEY) : null;
+    const isDark = saved ? saved === "dark" : true;
+    setDark(isDark);
+    document.documentElement.dataset.theme = isDark ? "dark" : "";
+  }, []);
+
+  function toggleTheme() {
+    setDark((d) => {
+      const next = !d;
+      document.documentElement.dataset.theme = next ? "dark" : "";
+      window.localStorage.setItem(THEME_KEY, next ? "dark" : "light");
+      return next;
+    });
+  }
 
   async function handleGetStarted() {
     if (status === "authenticated") {
@@ -70,21 +91,65 @@ export default function LandingPage() {
           <span style={styles.logoText}>VoltIQ</span>
         </div>
 
-        <div style={styles.navActions}>
+        {/* Desktop actions */}
+        <div className="voltiq-nav-actions" style={styles.navActions}>
+          {status === "authenticated" && (
+            <Link href="/history" style={styles.navLink}>History</Link>
+          )}
+          <button onClick={toggleTheme} title="Toggle theme" style={styles.themeToggle}>
+            {dark ? "☀️" : "🌙"}
+          </button>
           {status === "authenticated" ? (
-            <>
-              <Link href="/history" style={styles.navLink}>History</Link>
-              <button onClick={() => router.push("/plan")} style={styles.navCta}>
-                Open App →
-              </button>
-            </>
+            <button onClick={() => router.push("/plan")} style={styles.navCta}>
+              Open App →
+            </button>
           ) : (
             <button onClick={handleGetStarted} disabled={starting} style={styles.navCta}>
               {starting ? "Signing in…" : "Sign In"}
             </button>
           )}
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className="voltiq-nav-hamburger"
+          onClick={() => setMenuOpen((v) => !v)}
+          style={styles.hamburger}
+          aria-label="Menu"
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
       </nav>
+
+      {/* Mobile menu sheet */}
+      {menuOpen && (
+        <div className="voltiq-mobile-menu" style={styles.mobileMenu}>
+          {status === "authenticated" && (
+            <Link href="/history" style={styles.mobileMenuLink} onClick={() => setMenuOpen(false)}>
+              🕓 History
+            </Link>
+          )}
+          <button onClick={toggleTheme} style={styles.mobileMenuLink}>
+            {dark ? "☀️ Light mode" : "🌙 Dark mode"}
+          </button>
+          {status === "authenticated" ? (
+            <button
+              onClick={() => { setMenuOpen(false); router.push("/plan"); }}
+              style={{ ...styles.navCta, width: "100%" }}
+            >
+              Open App →
+            </button>
+          ) : (
+            <button
+              onClick={() => { setMenuOpen(false); handleGetStarted(); }}
+              disabled={starting}
+              style={{ ...styles.navCta, width: "100%" }}
+            >
+              {starting ? "Signing in…" : "Sign In"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Hero */}
       <section style={styles.hero}>
@@ -95,7 +160,7 @@ export default function LandingPage() {
 
         <h1 style={styles.headline}>
           Know your real EV range<br />
-          <span style={{ color: "#4ade80" }}>before you leave the driveway.</span>
+          <span style={{ color: "var(--green)" }}>before you leave the driveway.</span>
         </h1>
 
         <p style={styles.subhead}>
@@ -118,7 +183,7 @@ export default function LandingPage() {
           </div>
         )}
 
-        {/* Stats strip — className needed so the mobile media query below can target it */}
+        {/* Stats strip */}
         <div className="voltiq-stats-row" style={styles.statsRow}>
           {STATS.map((s) => (
             <div key={s.label} style={styles.statItem}>
@@ -190,8 +255,15 @@ export default function LandingPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .voltiq-nav-hamburger { display: none; }
+        .voltiq-mobile-menu { display: none; }
+
         @media (max-width: 720px) {
-          .voltiq-stats-row { flex-wrap: wrap; gap: 24px !important; }
+          .voltiq-stats-row { flex-wrap: wrap; gap: 24px !important; justify-content: flex-start !important; }
+          .voltiq-nav-actions { display: none !important; }
+          .voltiq-nav-hamburger { display: flex !important; }
+          .voltiq-mobile-menu { display: flex !important; }
         }
       `}</style>
     </main>
@@ -201,172 +273,197 @@ export default function LandingPage() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "#060c0a",
+    background: "var(--bg)",
     position: "relative",
-    color: "#f0faf2",
+    color: "var(--text)",
+    transition: "background .3s, color .3s",
   },
   gridBg: {
     position: "fixed",
     inset: 0,
     pointerEvents: "none",
     backgroundImage:
-      "linear-gradient(rgba(34,197,94,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,0.04) 1px, transparent 1px)",
+      "linear-gradient(var(--green-dim) 1px, transparent 1px), linear-gradient(90deg, var(--green-dim) 1px, transparent 1px)",
     backgroundSize: "44px 44px",
   },
 
   // Nav
   nav: {
-    position: "relative", zIndex: 2,
+    position: "relative", zIndex: 20,
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "20px 32px", maxWidth: 1200, margin: "0 auto",
+    padding: "18px 24px", maxWidth: 1200, margin: "0 auto",
   },
   logoRow: { display: "flex", alignItems: "center", gap: 10 },
   logoMark: {
     width: 32, height: 32, borderRadius: 9,
-    background: "#22c55e",
+    background: "var(--green)",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 16, fontWeight: 800,
   },
   logoMarkSmall: {
     width: 26, height: 26, borderRadius: 7,
-    background: "#22c55e",
+    background: "var(--green)",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 13, fontWeight: 800,
   },
-  logoText: { fontSize: 18, fontWeight: 800, color: "#4ade80", letterSpacing: "-0.3px" },
-  footerLogoText: { fontSize: 14, fontWeight: 700, color: "#4ade80" },
-  navActions: { display: "flex", alignItems: "center", gap: 20 },
-  navLink: { fontSize: 13.5, color: "#7fa88c", textDecoration: "none", fontWeight: 500 },
+  logoText: { fontSize: 18, fontWeight: 800, color: "var(--green)", letterSpacing: "-0.3px" },
+  footerLogoText: { fontSize: 14, fontWeight: 700, color: "var(--green)" },
+  navActions: { display: "flex", alignItems: "center", gap: 14 },
+  navLink: { fontSize: 13.5, color: "var(--text2)", textDecoration: "none", fontWeight: 500 },
   navCta: {
-    background: "#22c55e", color: "#060c0a",
+    background: "var(--green)", color: "#04140a",
     border: "none", borderRadius: 10, padding: "9px 18px",
     fontSize: 13.5, fontWeight: 700, cursor: "pointer",
     fontFamily: "inherit",
+  },
+  themeToggle: {
+    width: 32, height: 32, borderRadius: 8,
+    border: "1px solid var(--border)", background: "var(--surface2)",
+    fontSize: 14, cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
+  hamburger: {
+    width: 36, height: 36, borderRadius: 8,
+    border: "1px solid var(--border)", background: "var(--surface2)",
+    color: "var(--text)", fontSize: 16, cursor: "pointer",
+    alignItems: "center", justifyContent: "center",
+  },
+  mobileMenu: {
+    position: "relative", zIndex: 20,
+    flexDirection: "column", gap: 10,
+    padding: "0 24px 20px", maxWidth: 1200, margin: "0 auto",
+  },
+  mobileMenuLink: {
+    display: "flex", alignItems: "center", gap: 8,
+    padding: "11px 14px", borderRadius: 10,
+    background: "var(--surface)", border: "1px solid var(--border)",
+    color: "var(--text2)", fontSize: 14, fontWeight: 600,
+    textDecoration: "none", cursor: "pointer", fontFamily: "inherit",
   },
 
   // Hero
   hero: {
     position: "relative", zIndex: 2,
     maxWidth: 780, margin: "0 auto",
-    padding: "72px 24px 56px",
+    padding: "56px 20px 48px",
     display: "flex", flexDirection: "column", alignItems: "center",
     textAlign: "center",
   },
   heroBadge: {
     display: "flex", alignItems: "center", gap: 7,
     padding: "6px 14px", borderRadius: 20,
-    background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.22)",
-    fontSize: 12.5, color: "#7fa88c", fontWeight: 600, marginBottom: 24,
+    background: "var(--green-dim)", border: "1px solid var(--green-border)",
+    fontSize: 12.5, color: "var(--text2)", fontWeight: 600, marginBottom: 24,
   },
   liveDot: {
-    width: 6, height: 6, borderRadius: "50%", background: "#4ade80",
-    boxShadow: "0 0 0 3px rgba(74,222,128,0.2)",
+    width: 6, height: 6, borderRadius: "50%", background: "var(--green)",
+    boxShadow: "0 0 0 3px var(--green-dim)",
   },
   headline: {
-    fontSize: 46, fontWeight: 800, lineHeight: 1.15,
+    fontSize: "clamp(30px, 7vw, 46px)", fontWeight: 800, lineHeight: 1.15,
     letterSpacing: "-1px", margin: "0 0 20px",
-    color: "#f0faf2",
+    color: "var(--text)",
   },
   subhead: {
-    fontSize: 16.5, lineHeight: 1.65, color: "#8fb59d",
+    fontSize: "clamp(14.5px, 3.6vw, 16.5px)", lineHeight: 1.65, color: "var(--text2)",
     maxWidth: 560, margin: "0 0 32px",
   },
   heroActions: { display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" },
   primaryButton: {
-    background: "#22c55e", color: "#060c0a",
+    background: "var(--green)", color: "#04140a",
     border: "none", borderRadius: 12, padding: "14px 28px",
     fontSize: 15, fontWeight: 700, cursor: "pointer",
     fontFamily: "inherit", transition: "opacity .15s",
   },
   secondaryButton: {
-    background: "rgba(255,255,255,0.04)", color: "#e0f4e4",
-    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 24px",
+    background: "var(--surface2)", color: "var(--text)",
+    border: "1px solid var(--border)", borderRadius: 12, padding: "14px 24px",
     fontSize: 15, fontWeight: 600, textDecoration: "none",
     display: "inline-flex", alignItems: "center",
   },
   heroNote: {
-    marginTop: 16, fontSize: 12.5, color: "#4a6e56",
+    marginTop: 16, fontSize: 12.5, color: "var(--text3)",
   },
   statsRow: {
     display: "flex", gap: 48, marginTop: 56,
-    paddingTop: 32, borderTop: "1px solid rgba(255,255,255,0.06)",
+    paddingTop: 32, borderTop: "1px solid var(--border)",
     width: "100%", justifyContent: "center",
   },
   statItem: { textAlign: "center" },
-  statValue: { fontSize: 28, fontWeight: 800, color: "#4ade80" },
-  statLabel: { fontSize: 12, color: "#5f8a6e", marginTop: 4, maxWidth: 140 },
+  statValue: { fontSize: 28, fontWeight: 800, color: "var(--green)" },
+  statLabel: { fontSize: 12, color: "var(--text3)", marginTop: 4, maxWidth: 140 },
 
   // Sections
   section: {
     position: "relative", zIndex: 2,
     maxWidth: 1080, margin: "0 auto",
-    padding: "64px 24px",
+    padding: "56px 20px",
   },
-  sectionHeader: { textAlign: "center", marginBottom: 44 },
+  sectionHeader: { textAlign: "center", marginBottom: 40 },
   eyebrow: {
-    fontSize: 12, fontWeight: 700, color: "#4ade80",
+    fontSize: 12, fontWeight: 700, color: "var(--green)",
     textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 30, fontWeight: 800, color: "#f0faf2",
+    fontSize: "clamp(22px, 5vw, 30px)", fontWeight: 800, color: "var(--text)",
     letterSpacing: "-0.5px", margin: 0,
   },
 
   // Feature grid
   featureGrid: {
-    display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-    gap: 20,
+    display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+    gap: 18,
   },
   featureCard: {
-    background: "rgba(13,23,16,0.6)", border: "1px solid rgba(34,197,94,0.14)",
-    borderRadius: 16, padding: 24,
+    background: "var(--surface)", border: "1px solid var(--border)",
+    borderRadius: 16, padding: 22,
   },
   featureIconWrap: {
     width: 44, height: 44, borderRadius: 12,
-    background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)",
+    background: "var(--green-dim)", border: "1px solid var(--green-border)",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 20, marginBottom: 16,
   },
-  featureTitle: { fontSize: 15.5, fontWeight: 700, color: "#e0f4e4", marginBottom: 8 },
-  featureDesc: { fontSize: 13, lineHeight: 1.6, color: "#7fa88c" },
+  featureTitle: { fontSize: 15.5, fontWeight: 700, color: "var(--text)", marginBottom: 8 },
+  featureDesc: { fontSize: 13, lineHeight: 1.6, color: "var(--text2)" },
 
   // Steps
   stepsRow: {
-    display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 24,
+    display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: 22,
   },
   stepCard: { position: "relative" },
   stepNum: {
-    fontSize: 13, fontFamily: "monospace", fontWeight: 700,
-    color: "#4ade80", opacity: 0.6, marginBottom: 12,
+    fontSize: 13, fontFamily: "var(--font-mono)", fontWeight: 700,
+    color: "var(--green)", opacity: 0.7, marginBottom: 12,
   },
-  stepTitle: { fontSize: 16, fontWeight: 700, color: "#e0f4e4", marginBottom: 8 },
-  stepDesc: { fontSize: 13, lineHeight: 1.6, color: "#7fa88c" },
+  stepTitle: { fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 8 },
+  stepDesc: { fontSize: 13, lineHeight: 1.6, color: "var(--text2)" },
   stepConnector: { display: "none" },
 
   // CTA band
   ctaBand: {
     position: "relative", zIndex: 2,
     maxWidth: 640, margin: "0 auto",
-    padding: "64px 24px", textAlign: "center",
+    padding: "56px 20px", textAlign: "center",
   },
   ctaTitle: {
-    fontSize: 28, fontWeight: 800, color: "#f0faf2",
+    fontSize: "clamp(22px, 5.5vw, 28px)", fontWeight: 800, color: "var(--text)",
     letterSpacing: "-0.5px", margin: "0 0 12px",
   },
   ctaSubtitle: {
-    fontSize: 14.5, color: "#7fa88c", lineHeight: 1.6,
+    fontSize: 14.5, color: "var(--text2)", lineHeight: 1.6,
     margin: "0 0 28px",
   },
 
   // Footer
   footer: {
     position: "relative", zIndex: 2,
-    borderTop: "1px solid rgba(255,255,255,0.06)",
-    padding: "28px 32px",
+    borderTop: "1px solid var(--border)",
+    padding: "26px 24px",
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    maxWidth: 1200, margin: "0 auto",
+    maxWidth: 1200, margin: "0 auto", flexWrap: "wrap", gap: 12,
   },
   footerLinks: { display: "flex", gap: 16 },
-  footerText: { fontSize: 12, color: "#4a6e56" },
+  footerText: { fontSize: 12, color: "var(--text3)" },
 };

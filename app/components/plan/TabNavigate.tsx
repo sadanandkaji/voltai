@@ -77,7 +77,7 @@ export default function TabNavigate({ result, startBat, dark }: Props) {
           {/* Route options */}
           <div>
             <SectionTitle>Route Options</SectionTitle>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+            <div className="vq-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
               {[
                 { label: "Eco ⭐", dist: route.distanceKm, bat: battery.totalBatteryUsed, isMain: true },
                 { label: "Fastest", dist: Math.round(route.distanceKm * 0.89), bat: Math.round(battery.totalBatteryUsed * 1.42), isMain: false },
@@ -116,7 +116,7 @@ export default function TabNavigate({ result, startBat, dark }: Props) {
           </div>
 
           {/* Stats */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="vq-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <StatCard label="Predicted range" value={`${battery.effectiveRange} km`} sub="After weather & style" />
             <StatCard
               label="ETA"
@@ -142,7 +142,7 @@ export default function TabNavigate({ result, startBat, dark }: Props) {
                   <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--text3)" }}>efficiency</div>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+              <div className="vq-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
                 {[
                   { val: `${weather.temperature}°C`, key: "Temp" },
                   { val: `${weather.wind_speed}km/h`, key: "Wind" },
@@ -180,7 +180,7 @@ export default function TabNavigate({ result, startBat, dark }: Props) {
           {/* Power mode */}
           <div>
             <SectionTitle>Power Mode</SectionTitle>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
+            <div className="vq-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
               {[
                 { icon: "🌿", label: "Eco", active: true },
                 { icon: "🏎", label: "Sport", active: false },

@@ -158,6 +158,8 @@ function PlanPageContent() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   // True while a click on a history row is loading that trip's details.
   const [loadingHistoryRoute, setLoadingHistoryRoute] = useState(false);
+  // Mobile-only: whether the History drawer is open.
+  const [historyMobileOpen, setHistoryMobileOpen] = useState(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -299,6 +301,24 @@ ${historyLine}<br/>
     ? Math.round(result.battery.totalBatteryUsed + Math.max(0, result.battery.remainingBattery))
     : form.batteryPercent;
 
+  /* Small reusable hamburger button that opens the History drawer on mobile */
+  const HistoryToggle = () => (
+    <button
+      onClick={() => setHistoryMobileOpen(true)}
+      className="vq-mobile-menu-btn"
+      title="Trip history"
+      style={{
+        width: 32, height: 32, borderRadius: 8,
+        border: "1px solid var(--border)", background: "var(--surface2)",
+        color: "var(--text2)", fontSize: 15, cursor: "pointer",
+        alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      ☰
+    </button>
+  );
+
   /* ── Render ─────────────────────────────────────────────────────────── */
   return (
     <div
@@ -310,17 +330,19 @@ ${historyLine}<br/>
         transition: "background .3s",
       }}
     >
-      {/* ══════════ HISTORY SIDEBAR (always present) ══════════ */}
+      {/* ══════════ HISTORY SIDEBAR (always present; drawer on mobile) ══════════ */}
       <HistorySidebar
         activeId={result?.savedRouteId ?? null}
         onSelect={loadHistoryRoute}
         onNewPlan={startNewPlan}
         refreshKey={historyRefreshKey}
+        mobileOpen={historyMobileOpen}
+        onMobileClose={() => setHistoryMobileOpen(false)}
       />
 
       {/* ══════════ CHAT PANE — shown only until a trip is loaded ══════════ */}
       {!result && (
-        <div style={{ display: "flex", flexDirection: "column", height: "100vh", flex: 1, position: "relative" }}>
+        <div style={{ display: "flex", flexDirection: "column", height: "100vh", flex: 1, position: "relative", minWidth: 0 }}>
           {/* Header */}
           <div
             style={{
@@ -333,17 +355,20 @@ ${historyLine}<br/>
               flexShrink: 0,
             }}
           >
+            <HistoryToggle />
+
             {/* Logo */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
               <div
                 style={{
                   width: 28, height: 28, borderRadius: 8,
                   background: "var(--green)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 14, color: "#fff", fontWeight: 800,
+                  flexShrink: 0,
                 }}
               >⚡</div>
-              <span style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 15, color: "var(--green)", letterSpacing: "-.3px" }}>
+              <span className="vq-chat-brand-text" style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 15, color: "var(--green)", letterSpacing: "-.3px", whiteSpace: "nowrap" }}>
                 VoltIQ
               </span>
             </div>
@@ -530,13 +555,15 @@ ${historyLine}<br/>
 
       {/* ══════════ MAP + TABS PANE — shown once a trip (fresh or from history) is loaded ══════════ */}
       {result && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
           {/* Tab bar */}
-          <div style={{
+          <div className="vq-tab-bar" style={{
             display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)",
-            background: "var(--surface)", padding: "0 4px",
+            background: "var(--surface)", padding: "0 4px", gap: 2,
             flexShrink: 0, overflowX: "auto",
           }}>
+            <HistoryToggle />
+
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -552,7 +579,7 @@ ${historyLine}<br/>
                 }}
               >
                 <span style={{ fontSize: 13 }}>{t.icon}</span>
-                {t.label}
+                <span className="vq-tab-label">{t.label}</span>
               </button>
             ))}
 
@@ -569,7 +596,7 @@ ${historyLine}<br/>
                     textDecoration: "none", flexShrink: 0,
                   }}
                 >
-                  💳 {creditsRemaining}
+                  <span className="vq-header-credits-label">💳</span> {creditsRemaining}
                 </Link>
               )}
               <ProfileMenu creditsRemaining={creditsRemaining} />
