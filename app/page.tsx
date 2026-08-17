@@ -234,10 +234,7 @@ export default function LandingPage() {
         initial="hidden"
         animate="show"
       >
-        <motion.div variants={fadeUp} style={styles.heroBadge}>
-          <span style={styles.liveDot} />
-          Live charger data · AI-powered
-        </motion.div>
+      
 
         <motion.h1 variants={fadeUp} style={styles.headline}>
           Know your real EV range<br />

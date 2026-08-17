@@ -141,7 +141,7 @@ function HistoryPageContent() {
       <div style={{ paddingTop: 56 }}>
         <div
           className="vq-profile-container"
-          style={{ maxWidth: 760, margin: "0 auto", padding: "32px 20px 60px" }}
+          style={{ maxWidth: 760, margin: "0 auto", padding: "32px 20px 100px" }}
         >
           <div style={{ marginBottom: 22 }}>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>

@@ -373,9 +373,13 @@ gestureHandling: (typeof window !== "undefined" && window.innerWidth < 768) ? "g
         </div>
       )}
 
-      {/* ═══════ BOTTOM ROW — legend (left, flexible) + Directions toggle (right, fixed) sharing one row so the legend can never run under the button ═══════ */}
+      {/* ═══════ BOTTOM ROW — legend (left, flexible) + Directions toggle (right, fixed) sharing one row so the legend can never run under the button.
+          Nudged up from bottom-3 to bottom-6, plus a safe-area inset so it clears mobile browser chrome / the home-indicator area on notched devices. ═══════ */}
       {!loading && !error && (
-        <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-2">
+        <div
+          className="absolute left-3 right-3 z-10 flex items-end justify-between gap-2"
+          style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}
+        >
           {/* Legend — flex-1 + min-w-0 lets it shrink/scroll instead of overflowing under the button */}
           <div className="flex-1 min-w-0 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
             <div className="inline-flex items-center gap-2 sm:gap-3 rounded-xl px-3 py-2 whitespace-nowrap"

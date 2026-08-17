@@ -1,3 +1,4 @@
+// app/profile/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -115,6 +116,19 @@ function ProfilePageContent() {
   const pct = data && data.startingCredits > 0 ? Math.max(0, Math.min(100, (data.credits / data.startingCredits) * 100)) : 0;
   const tripsLeft = data ? Math.floor(data.credits / Math.max(1, data.creditsPerTrip)) : 0;
 
+  // Mailto link for requesting more credits — opens the user's default
+  // mail app addressed to you, with account details pre-filled so you
+  // know who's asking and their current balance.
+  const creditRequestMailto = `mailto:sadanandkaji2@gmail.com?subject=${encodeURIComponent(
+    "VoltIQ — Request for more credits"
+  )}&body=${encodeURIComponent(
+    `Hi,\n\nI'd like to request more credits for my VoltIQ account.\n\n` +
+      `Account email: ${user?.email || "—"}\n` +
+      `Name: ${user?.name || "—"}\n` +
+      `Current balance: ${data?.credits ?? "—"} credits\n\n` +
+      `Thanks!`
+  )}`;
+
   return (
     <div
       style={{
@@ -172,7 +186,10 @@ function ProfilePageContent() {
         </span>
       </div>
 
-      <div className="vq-profile-container" style={{ maxWidth: 680, margin: "0 auto", padding: "32px 20px 60px", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div
+        className="vq-profile-container"
+        style={{ maxWidth: 680, margin: "0 auto", padding: "32px 20px 100px", display: "flex", flexDirection: "column", gap: 18 }}
+      >
         {/* ── Identity hero ── */}
         <div
           className="vq-profile-identity"
@@ -298,7 +315,10 @@ function ProfilePageContent() {
                     <strong style={{ color: "var(--green)" }}>{tripsLeft}</strong> more trip{tripsLeft === 1 ? "" : "s"}
                   </div>
 
-                  <button
+                  {/* Get more credits — plain mailto link addressed to you,
+                      pre-filled with the user's account details */}
+                  <a
+                    href={creditRequestMailto}
                     style={{
                       marginTop: 14,
                       padding: "9px 18px",
@@ -311,12 +331,14 @@ function ProfilePageContent() {
                       fontFamily: "var(--font-sans)",
                       cursor: "pointer",
                       transition: "opacity .15s",
+                      textDecoration: "none",
+                      display: "inline-block",
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = ".85")}
                     onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
                   >
                     Get more credits
-                  </button>
+                  </a>
                 </div>
               </div>
             </>
@@ -507,7 +529,7 @@ function ProfilePageContent() {
 
         @media (max-width: 640px) {
           .vq-profile-container {
-            padding: 20px 14px 48px !important;
+            padding: 20px 14px 100px !important;
             gap: 14px !important;
           }
           .vq-profile-identity {

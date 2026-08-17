@@ -389,7 +389,8 @@ ${historyLine}<br/>
               flexShrink: 0,
               flexWrap: "wrap",
               rowGap: 8,
-              zIndex: 50,
+              position: "relative",
+              zIndex: 500,
             }}
           >
             <HistoryToggle />
@@ -560,7 +561,15 @@ ${historyLine}<br/>
             display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)",
             background: "var(--surface)", padding: "0 4px", gap: 2,
             flexShrink: 0, overflowX: "auto",
-            zIndex: 50,
+            position: "relative",
+            // Was zIndex: 50 with no explicit `position` — the fix for the
+            // Profile menu being hidden behind the map on the Navigate
+            // tab. Google Maps often injects its own internal layers with
+            // very high z-index values that can climb above a modest 50.
+            // This also gives the bar its own explicit stacking context
+            // via position:relative rather than relying on implicit
+            // flex-item z-index behavior.
+            zIndex: 500,
           }}>
             <HistoryToggle />
 
