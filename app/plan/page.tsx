@@ -166,6 +166,18 @@ function PlanPageContent() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Lock body scroll so mobile keyboard / browser chrome never pushes the layout
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    const originalHeight = document.body.style.height;
+    document.body.style.overflow = "hidden";
+    document.body.style.height = "100%";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.height = originalHeight;
+    };
+  }, []);
+
   function toggleTheme() {
     setDark((d) => {
       const next = !d;
@@ -176,7 +188,6 @@ function PlanPageContent() {
   }
 
   const [msgs, setMsgs] = useState<Msg[]>(INITIAL_MSGS);
-  const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
 
@@ -317,33 +328,6 @@ ${historyLine}<br/>
     setForm({ origin: "", destination: "", batteryPercent: 74, vehicleRangeKm: 400 });
     setPreset("Custom");
     setMsgs(INITIAL_MSGS);
-    setChatInput("");
-  }
-
-  /* ── Chat ───────────────────────────────────────────────────────────── */
-  async function sendChat() {
-    const text = chatInput.trim();
-    if (!text) return;
-    setChatInput("");
-    setMsgs((prev) => [...prev, { kind: "user", text }, { kind: "typing" }]);
-    await new Promise((r) => setTimeout(r, 900));
-    setMsgs((prev) => {
-      const filtered = prev.filter((m) => m.kind !== "typing");
-      const lower = text.toLowerCase();
-      let html = "I can help! Use the tabs on the right to explore battery, chargers, and AI analysis.";
-      if (lower.includes("charg")) html = "Charger details are in the <strong>Chargers</strong> tab — with live status and distances.";
-      else if (lower.includes("batter")) html = "Your battery prediction is in the <strong>Battery</strong> tab with all impact factors.";
-      else if (lower.includes("speed")) html = "Optimal speed for maximum range is around <strong>72–90 km/h</strong>. See the AI tab for personalised tips.";
-      else if (lower.includes("route") || lower.includes("map"))
-        html = "Your route is shown on the <strong>Navigate</strong> tab — eco, fast, and shortest options with battery cost for each.";
-      else if (lower.includes("weather")) html = "Weather conditions are shown in the <strong>Navigate → Details</strong> subtab with efficiency impact.";
-      else if (lower.includes("credit"))
-        html =
-          creditsRemaining !== null
-            ? `You have <strong>${creditsRemaining}</strong> credits remaining. Each route plan costs 5 credits — check your <strong>Profile</strong> for full activity.`
-            : "Check your credit balance from the account menu in the top-right.";
-      return [...filtered, { kind: "ai" as const, html }];
-    });
   }
 
   const startBat = result
@@ -373,7 +357,7 @@ ${historyLine}<br/>
     <div
       style={{
         display: "flex",
-        height: "100vh",
+        height: "100dvh",
         overflow: "hidden",
         background: "var(--bg)",
         transition: "background .3s",
@@ -391,8 +375,8 @@ ${historyLine}<br/>
 
       {/* ══════════ CHAT PANE — shown only until a trip is loaded ══════════ */}
       {!result && (
-        <div style={{ display: "flex", flexDirection: "column", height: "100vh", flex: 1, position: "relative", minWidth: 0 }}>
-          {/* Header — fixed to the top of this pane at all times */}
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", flex: 1, position: "relative", minWidth: 0 }}>
+          {/* Header */}
           <div
             className="vq-chat-header"
             style={{
@@ -405,8 +389,6 @@ ${historyLine}<br/>
               flexShrink: 0,
               flexWrap: "wrap",
               rowGap: 8,
-              position: "sticky",
-              top: 0,
               zIndex: 50,
             }}
           >
@@ -428,13 +410,13 @@ ${historyLine}<br/>
               </span>
             </div>
 
-            {/* Live dot — hidden on narrow phones to make room for the actions on the right */}
+            {/* Live dot */}
             <div className="vq-live-indicator" style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 4 }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 0 2px rgba(16,185,129,.2)" }} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)" }}>Live</span>
             </div>
 
-            {/* Credits pill — only shown once we know the balance */}
+            {/* Credits pill */}
             {creditsRemaining !== null && (
               <Link
                 href="/profile"
@@ -451,7 +433,7 @@ ${historyLine}<br/>
               </Link>
             )}
 
-            {/* Actions — flexShrink:0 so the toggle + avatar are NEVER what gets clipped/overflowed */}
+            {/* Actions */}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               <button
                 onClick={toggleTheme}
@@ -465,7 +447,6 @@ ${historyLine}<br/>
               >
                 {dark ? "☀️" : "🌙"}
               </button>
-              {/* Account menu — avatar, credits shortcut, profile link, sign out */}
               <ProfileMenu creditsRemaining={creditsRemaining} />
             </div>
           </div>
@@ -555,45 +536,7 @@ ${historyLine}<br/>
             <div ref={chatEndRef} style={{ height: 4 }} />
           </div>
 
-          {/* Chat input */}
-          <div style={{
-            padding: "10px 16px 12px",
-            borderTop: "1px solid var(--border)",
-            background: "var(--surface)",
-            display: "flex", gap: 8, alignItems: "center",
-            flexShrink: 0,
-          }}>
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendChat()}
-              placeholder="Ask about battery, chargers, weather…"
-              style={{
-                flex: 1, background: "var(--surface2)",
-                border: "1px solid var(--border)",
-                borderRadius: 22, padding: "9px 16px",
-                fontSize: 13, fontFamily: "var(--font-sans)",
-                color: "var(--text)", outline: "none",
-                transition: "border-color .15s",
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--green)")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-            />
-            <button
-              onClick={sendChat}
-              style={{
-                width: 36, height: 36, borderRadius: "50%",
-                background: "var(--green)", border: "none",
-                color: "#fff", fontSize: 16, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0, transition: "opacity .15s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = ".85")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-            >↑</button>
-          </div>
-
-          {/* Loading overlay — shown while a history row is being opened */}
+          {/* Loading overlay */}
           {loadingHistoryRoute && (
             <div
               style={{
@@ -609,16 +552,14 @@ ${historyLine}<br/>
         </div>
       )}
 
-      {/* ══════════ MAP + TABS PANE — shown once a trip (fresh or from history) is loaded ══════════ */}
+      {/* ══════════ MAP + TABS PANE — shown once a trip is loaded ══════════ */}
       {result && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-          {/* Tab bar — fixed to the top of this pane at all times */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
+          {/* Tab bar */}
           <div className="vq-tab-bar" style={{
             display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)",
             background: "var(--surface)", padding: "0 4px", gap: 2,
             flexShrink: 0, overflowX: "auto",
-            position: "sticky",
-            top: 0,
             zIndex: 50,
           }}>
             <HistoryToggle />
@@ -642,7 +583,6 @@ ${historyLine}<br/>
               </button>
             ))}
 
-            {/* Account menu also lives here so it's reachable once the chat pane is hidden */}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingRight: 6, flexShrink: 0 }}>
               {creditsRemaining !== null && (
                 <Link
@@ -664,9 +604,10 @@ ${historyLine}<br/>
 
           {/* Tab content */}
           <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-            {/* Navigate — always rendered, toggled by opacity so map stays alive */}
+            {/* Navigate */}
             <div style={{
               position: "absolute", inset: 0,
+              overflow: "hidden",
               opacity: activeTab === "navigate" ? 1 : 0,
               pointerEvents: activeTab === "navigate" ? "auto" : "none",
               zIndex: activeTab === "navigate" ? 1 : 0,

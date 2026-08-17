@@ -55,7 +55,11 @@ function HistoryPageContent() {
   const loading = routes === null && !error;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    // height + overflowY here instead of minHeight, so this page scrolls on
+    // its own regardless of whatever overflow rules are set on html/body
+    // (e.g. the fixed 100vh flex layout on /plan sets overflow:hidden on
+    // the document, which was silently inherited here and blocked scroll).
+    <div style={{ height: "100vh", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "var(--bg)" }}>
       {/* Fixed Header */}
       <div
         style={{

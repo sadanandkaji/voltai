@@ -322,6 +322,15 @@ function MobileScene() {
               duration: 6.5,
               times: MOBILE_ROTATE_TIMES,
               ease: "linear",
+              // A per-property transition override REPLACES the whole
+              // transition for that property rather than merging with the
+              // parent — repeat/repeatDelay were only set on the outer
+              // object, so rotate played once and then froze while x/y
+              // kept looping forever. That's why the car pointed the wrong
+              // way (stuck on the last segment's heading) on every loop
+              // after the first. Needs its own repeat settings too.
+              repeat: Infinity,
+              repeatDelay: 0.8,
             },
           }}
         >
