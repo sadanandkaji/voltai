@@ -5,6 +5,39 @@ import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { motion, type Variants, type Easing } from "framer-motion";
+import { Globe } from "lucide-react";
+import RouteShowcase from "./components/landing/routeshowcase";
+
+// lucide-react dropped brand/logo icons (Github, Twitter, etc.) — inline
+// minimal SVGs instead, sized/stroked to match the lucide icons they replace.
+function GithubIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 0.5C5.65 0.5 0.5 5.65 0.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1.17-.02-2.12-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.03 11.03 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.59.24 2.76.12 3.05.74.8 1.19 1.82 1.19 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.2.68.8.56A11.51 11.51 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5Z" />
+    </svg>
+  );
+}
+
+function XIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231ZM17.083 19.77h1.833L7.084 4.126H5.117Z" />
+    </svg>
+  );
+}
 
 const FEATURES = [
   {
@@ -41,7 +74,25 @@ const STATS = [
   { value: "50", label: "credits per trip plan" },
 ];
 
+const SOCIALS = [
+  { icon: GithubIcon, label: "GitHub", href: "https://github.com/sadanandkaji" },
+  { icon: XIcon, label: "X", href: "https://x.com/sadanand_kaji" },
+  { icon: Globe, label: "Portfolio", href: "https://sadanandkaji.com" },
+];
+
 const THEME_KEY = "voltiq-theme";
+
+// Shared entrance variants — fade + rise, staggered by children.
+const EASE_OUT: Easing = [0.16, 1, 0.3, 1];
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE_OUT } },
+};
+const stagger = (delayChildren = 0, staggerChildren = 0.1): Variants => ({
+  hidden: {},
+  show: { transition: { staggerChildren, delayChildren } },
+});
 
 export default function LandingPage() {
   const { data: session, status } = useSession();
@@ -82,7 +133,7 @@ export default function LandingPage() {
 
   return (
     <main style={styles.page}>
-      <div style={styles.gridBg} />
+      <div className="voltiq-grid-bg" style={styles.gridBg} />
 
       {/* Nav */}
       <nav style={styles.nav}>
@@ -152,87 +203,135 @@ export default function LandingPage() {
       )}
 
       {/* Hero */}
-      <section style={styles.hero}>
-        <div style={styles.heroBadge}>
+      <motion.section
+        style={styles.hero}
+        variants={stagger(0.05, 0.12)}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div variants={fadeUp} style={styles.heroBadge}>
           <span style={styles.liveDot} />
           Live charger data · AI-powered
-        </div>
+        </motion.div>
 
-        <h1 style={styles.headline}>
+        <motion.h1 variants={fadeUp} style={styles.headline}>
           Know your real EV range<br />
           <span style={{ color: "var(--green)" }}>before you leave the driveway.</span>
-        </h1>
+        </motion.h1>
 
-        <p style={styles.subhead}>
+        <motion.p variants={fadeUp} style={styles.subhead}>
           VoltIQ predicts real-world battery usage — accounting for weather, elevation, and
           driving style — and maps every charger along your route. No more range anxiety.
-        </p>
+        </motion.p>
 
-        <div style={styles.heroActions}>
+        <motion.div variants={fadeUp} style={styles.heroActions}>
           <button onClick={handleGetStarted} disabled={starting} style={styles.primaryButton}>
             {starting ? "Signing in…" : status === "authenticated" ? "Open App →" : "Plan Your First Trip →"}
           </button>
           <a href="#how-it-works" style={styles.secondaryButton}>
             See how it works
           </a>
-        </div>
+        </motion.div>
 
         {status !== "authenticated" && (
-          <div style={styles.heroNote}>
+          <motion.div variants={fadeUp} style={styles.heroNote}>
             Free to start — 100 credits, no card required
-          </div>
+          </motion.div>
         )}
 
+        {/* Animated route + charging-station preview */}
+        <motion.div
+          variants={fadeUp}
+          style={{ marginTop: 40, width: "100%", display: "flex", justifyContent: "center" }}
+        >
+          <RouteShowcase />
+        </motion.div>
+
         {/* Stats strip */}
-        <div className="voltiq-stats-row" style={styles.statsRow}>
+        <motion.div variants={fadeUp} className="voltiq-stats-row" style={styles.statsRow}>
           {STATS.map((s) => (
             <div key={s.label} style={styles.statItem}>
               <div style={styles.statValue}>{s.value}</div>
               <div style={styles.statLabel}>{s.label}</div>
             </div>
           ))}
-        </div>
-      </section>
+        </motion.div>
+      </motion.section>
 
       {/* Features */}
       <section style={styles.section}>
-        <div style={styles.sectionHeader}>
+        <motion.div
+          style={styles.sectionHeader}
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5 }}
+        >
           <div style={styles.eyebrow}>Why VoltIQ</div>
           <h2 style={styles.sectionTitle}>Built for the way EVs actually behave</h2>
-        </div>
+        </motion.div>
 
-        <div style={styles.featureGrid}>
+        <motion.div
+          style={styles.featureGrid}
+          variants={stagger(0, 0.09)}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-60px" }}
+        >
           {FEATURES.map((f) => (
-            <div key={f.title} style={styles.featureCard}>
+            <motion.div
+              key={f.title}
+              variants={fadeUp}
+              whileHover={{ y: -4, borderColor: "var(--green-border)" }}
+              style={styles.featureCard}
+            >
               <div style={styles.featureIconWrap}>{f.icon}</div>
               <div style={styles.featureTitle}>{f.title}</div>
               <div style={styles.featureDesc}>{f.desc}</div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </section>
 
       {/* How it works */}
       <section id="how-it-works" style={styles.section}>
-        <div style={styles.sectionHeader}>
+        <motion.div
+          style={styles.sectionHeader}
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5 }}
+        >
           <div style={styles.eyebrow}>How it works</div>
           <h2 style={styles.sectionTitle}>Three steps to a stress-free trip</h2>
-        </div>
+        </motion.div>
 
-        <div style={styles.stepsRow}>
+        <motion.div
+          style={styles.stepsRow}
+          variants={stagger(0, 0.12)}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-60px" }}
+        >
           {STEPS.map((s, i) => (
-            <div key={s.num} style={styles.stepCard}>
+            <motion.div key={s.num} variants={fadeUp} style={styles.stepCard}>
               <div style={styles.stepNum}>{s.num}</div>
               <div style={styles.stepTitle}>{s.title}</div>
               <div style={styles.stepDesc}>{s.desc}</div>
               {i < STEPS.length - 1 && <div style={styles.stepConnector} />}
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </section>
 
       {/* CTA band */}
-      <section style={styles.ctaBand}>
+      <motion.section
+        style={styles.ctaBand}
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.5 }}
+      >
         <h2 style={styles.ctaTitle}>Ready to drive without the guesswork?</h2>
         <p style={styles.ctaSubtitle}>
           Join drivers who plan smarter EV trips with real battery predictions and live charger data.
@@ -240,21 +339,54 @@ export default function LandingPage() {
         <button onClick={handleGetStarted} disabled={starting} style={styles.primaryButton}>
           {starting ? "Signing in…" : status === "authenticated" ? "Open App →" : "Get Started Free →"}
         </button>
-      </section>
+      </motion.section>
 
       {/* Footer */}
       <footer style={styles.footer}>
-        <div style={styles.logoRow}>
-          <div style={styles.logoMarkSmall}>⚡</div>
-          <span style={styles.footerLogoText}>VoltIQ</span>
+        <div style={styles.footerTop}>
+          <div style={styles.logoRow}>
+            <div style={styles.logoMarkSmall}>⚡</div>
+            <span style={styles.footerLogoText}>VoltIQ</span>
+          </div>
+
+          <div style={styles.socialRow}>
+            {SOCIALS.map((s) => (
+              <a
+                key={s.label}
+                href={s.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={s.label}
+                style={styles.socialLink}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--green)"; e.currentTarget.style.borderColor = "var(--green-border)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text2)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+              >
+                <s.icon size={15} />
+              </a>
+            ))}
+          </div>
         </div>
-        <div style={styles.footerLinks}>
+
+        <div style={styles.footerDivider} />
+
+        <div style={styles.footerBottom}>
           <span style={styles.footerText}>© {new Date().getFullYear()} VoltIQ</span>
+          <span style={styles.footerText}>
+            Made by{" "}
+            <a href="https://sadanandkaji.com" target="_blank" rel="noopener noreferrer" style={styles.footerCredit}>
+              Sadanand Kaji
+            </a>
+          </span>
         </div>
       </footer>
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes voltiq-drift {
+          from { background-position: 0 0, 0 0; }
+          to   { background-position: 44px 44px, 44px 44px; }
+        }
+        .voltiq-grid-bg { animation: voltiq-drift 26s linear infinite; }
 
         .voltiq-nav-hamburger { display: none; }
         .voltiq-mobile-menu { display: none; }
@@ -277,6 +409,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     color: "var(--text)",
     transition: "background .3s, color .3s",
+    overflowX: "hidden",
   },
   gridBg: {
     position: "fixed",
@@ -385,7 +518,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 16, fontSize: 12.5, color: "var(--text3)",
   },
   statsRow: {
-    display: "flex", gap: 48, marginTop: 56,
+    display: "flex", gap: 48, marginTop: 44,
     paddingTop: 32, borderTop: "1px solid var(--border)",
     width: "100%", justifyContent: "center",
   },
@@ -417,6 +550,7 @@ const styles: Record<string, React.CSSProperties> = {
   featureCard: {
     background: "var(--surface)", border: "1px solid var(--border)",
     borderRadius: 16, padding: 22,
+    transition: "border-color .2s",
   },
   featureIconWrap: {
     width: 44, height: 44, borderRadius: 12,
@@ -460,10 +594,27 @@ const styles: Record<string, React.CSSProperties> = {
   footer: {
     position: "relative", zIndex: 2,
     borderTop: "1px solid var(--border)",
-    padding: "26px 24px",
+    padding: "26px 24px 22px",
+    maxWidth: 1200, margin: "0 auto",
+  },
+  footerTop: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
-    maxWidth: 1200, margin: "0 auto", flexWrap: "wrap", gap: 12,
+    flexWrap: "wrap", gap: 14,
+  },
+  socialRow: { display: "flex", alignItems: "center", gap: 8 },
+  socialLink: {
+    width: 32, height: 32, borderRadius: 8,
+    border: "1px solid var(--border)", background: "var(--surface2)",
+    color: "var(--text2)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    transition: "color .15s, border-color .15s",
+  },
+  footerDivider: { height: 1, background: "var(--border)", margin: "18px 0 14px" },
+  footerBottom: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    flexWrap: "wrap", gap: 8,
   },
   footerLinks: { display: "flex", gap: 16 },
   footerText: { fontSize: 12, color: "var(--text3)" },
+  footerCredit: { color: "var(--text2)", fontWeight: 600, textDecoration: "none" },
 };
