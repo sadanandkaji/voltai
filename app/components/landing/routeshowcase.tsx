@@ -1,7 +1,6 @@
 // app/components/landing/RouteShowcase.tsx
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion, type Variants, type Easing } from "framer-motion";
 
 type Charger = {
@@ -223,7 +222,7 @@ const zoomIn: Variants = {
 
 function MobileScene() {
   return (
-    <svg viewBox={`0 0 ${MOBILE_W} ${MOBILE_H}`} width="100%" height="auto" style={styles.svgMobile}>
+    <svg viewBox={`0 0 ${MOBILE_W} ${MOBILE_H}`} width="100%" height="auto" style={styles.svg}>
       <motion.g variants={zoomIn} style={{ transformOrigin: `${MOBILE_W / 2}px ${MOBILE_H / 2}px` }}>
         <path
           d={MOBILE_PATH_D}
@@ -297,18 +296,12 @@ function MobileScene() {
 }
 
 // ---------- Shared shell ----------
+// Both scenes render; a pure-CSS media query (same pattern as the nav's
+// hamburger/desktop-actions toggle in page.tsx) decides which is visible.
+// This avoids any JS matchMedia timing/hydration race that could leave
+// the desktop (horizontal) scene showing on a mobile viewport.
 
 export default function RouteShowcase() {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
   return (
     <motion.div variants={container} initial="hidden" animate="show" style={styles.wrap}>
       <div style={styles.card}>
@@ -317,8 +310,11 @@ export default function RouteShowcase() {
           <span style={styles.rangeBadge}>62% battery at arrival</span>
         </div>
 
-        <div style={isMobile ? styles.svgFrameMobile : undefined}>
-          {isMobile ? <MobileScene /> : <DesktopScene />}
+        <div className="voltiq-route-desktop">
+          <DesktopScene />
+        </div>
+        <div className="voltiq-route-mobile" style={styles.mobileFrame}>
+          <MobileScene />
         </div>
 
         <motion.div variants={container} style={styles.chargerList}>
@@ -330,6 +326,14 @@ export default function RouteShowcase() {
           ))}
         </motion.div>
       </div>
+
+      <style>{`
+        .voltiq-route-mobile { display: none; }
+        @media (max-width: 720px) {
+          .voltiq-route-desktop { display: none !important; }
+          .voltiq-route-mobile { display: block !important; }
+        }
+      `}</style>
     </motion.div>
   );
 }
@@ -371,11 +375,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "block",
     overflow: "visible",
   },
-  svgMobile: {
-    display: "block",
-    overflow: "visible",
-  },
-  svgFrameMobile: {
+  mobileFrame: {
     maxWidth: 260,
     margin: "0 auto",
   },

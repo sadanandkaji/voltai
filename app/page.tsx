@@ -109,6 +109,31 @@ export default function LandingPage() {
     document.documentElement.dataset.theme = isDark ? "dark" : "";
   }, []);
 
+  // Some route elsewhere in the app (a modal, a drawer, etc.) may leave
+  // html/body with overflow:hidden set on them, which makes this page
+  // un-scrollable even though its own content has no overflow rules.
+  // Force scrolling back on whenever the landing page is mounted.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlHeight = html.style.height;
+    const prevBodyHeight = body.style.height;
+
+    html.style.overflow = "visible";
+    body.style.overflow = "visible";
+    html.style.height = "auto";
+    body.style.height = "auto";
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      html.style.height = prevHtmlHeight;
+      body.style.height = prevBodyHeight;
+    };
+  }, []);
+
   function toggleTheme() {
     setDark((d) => {
       const next = !d;
@@ -410,6 +435,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text)",
     transition: "background .3s, color .3s",
     overflowX: "hidden",
+    overflowY: "visible",
   },
   gridBg: {
     position: "fixed",
