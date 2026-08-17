@@ -18,6 +18,10 @@ import TabBattery from "../components/plan/TabBattery";
 import TabChargers from "../components/plan/TabChargers";
 import TabAI from "../components/plan/TabAI";
 
+/** Shared with app/page.tsx (landing) so both pages read/write the same
+ *  saved preference and always stay in sync. */
+const THEME_KEY = "voltiq-theme";
+
 /** Trips saved before AI insights had a `tips` column fall back to these,
  *  matching the defaults `route-plan` generates for a fresh calculation. */
 const FALLBACK_TIPS = (ok: boolean) =>
@@ -138,11 +142,38 @@ function PlanPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [dark, setDark] = useState(false);
+  // Default to dark (matches the landing page's default) until the saved
+  // preference is read on mount — both pages share the same localStorage
+  // key so switching the theme anywhere keeps everything in sync.
+  const [dark, setDark] = useState(true);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "";
-  }, [dark]);
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(THEME_KEY) : null;
+    const isDark = saved ? saved === "dark" : true;
+    setDark(isDark);
+    document.documentElement.dataset.theme = isDark ? "dark" : "";
+  }, []);
+
+  // Keep in sync if the theme is changed in another tab/window too.
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key !== THEME_KEY) return;
+      const isDark = e.newValue ? e.newValue === "dark" : true;
+      setDark(isDark);
+      document.documentElement.dataset.theme = isDark ? "dark" : "";
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  function toggleTheme() {
+    setDark((d) => {
+      const next = !d;
+      document.documentElement.dataset.theme = next ? "dark" : "";
+      window.localStorage.setItem(THEME_KEY, next ? "dark" : "light");
+      return next;
+    });
+  }
 
   const [msgs, setMsgs] = useState<Msg[]>(INITIAL_MSGS);
   const [chatInput, setChatInput] = useState("");
@@ -361,7 +392,7 @@ ${historyLine}<br/>
       {/* ══════════ CHAT PANE — shown only until a trip is loaded ══════════ */}
       {!result && (
         <div style={{ display: "flex", flexDirection: "column", height: "100vh", flex: 1, position: "relative", minWidth: 0 }}>
-          {/* Header */}
+          {/* Header — fixed to the top of this pane at all times */}
           <div
             className="vq-chat-header"
             style={{
@@ -374,6 +405,9 @@ ${historyLine}<br/>
               flexShrink: 0,
               flexWrap: "wrap",
               rowGap: 8,
+              position: "sticky",
+              top: 0,
+              zIndex: 50,
             }}
           >
             <HistoryToggle />
@@ -420,7 +454,7 @@ ${historyLine}<br/>
             {/* Actions — flexShrink:0 so the toggle + avatar are NEVER what gets clipped/overflowed */}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               <button
-                onClick={() => setDark((d) => !d)}
+                onClick={toggleTheme}
                 style={{
                   width: 28, height: 28, borderRadius: 6,
                   border: "1px solid var(--border)", background: "var(--surface2)",
@@ -578,11 +612,14 @@ ${historyLine}<br/>
       {/* ══════════ MAP + TABS PANE — shown once a trip (fresh or from history) is loaded ══════════ */}
       {result && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-          {/* Tab bar */}
+          {/* Tab bar — fixed to the top of this pane at all times */}
           <div className="vq-tab-bar" style={{
             display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)",
             background: "var(--surface)", padding: "0 4px", gap: 2,
             flexShrink: 0, overflowX: "auto",
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
           }}>
             <HistoryToggle />
 
