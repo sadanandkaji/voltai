@@ -363,6 +363,7 @@ ${historyLine}<br/>
         <div style={{ display: "flex", flexDirection: "column", height: "100vh", flex: 1, position: "relative", minWidth: 0 }}>
           {/* Header */}
           <div
+            className="vq-chat-header"
             style={{
               display: "flex",
               alignItems: "center",
@@ -371,12 +372,14 @@ ${historyLine}<br/>
               borderBottom: "1px solid var(--border)",
               background: "var(--surface)",
               flexShrink: 0,
+              flexWrap: "wrap",
+              rowGap: 8,
             }}
           >
             <HistoryToggle />
 
             {/* Logo */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flexShrink: 0 }}>
               <div
                 style={{
                   width: 28, height: 28, borderRadius: 8,
@@ -391,8 +394,8 @@ ${historyLine}<br/>
               </span>
             </div>
 
-            {/* Live dot */}
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 4 }}>
+            {/* Live dot — hidden on narrow phones to make room for the actions on the right */}
+            <div className="vq-live-indicator" style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 4 }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 0 2px rgba(16,185,129,.2)" }} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text3)" }}>Live</span>
             </div>
@@ -414,8 +417,8 @@ ${historyLine}<br/>
               </Link>
             )}
 
-            {/* Actions */}
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            {/* Actions — flexShrink:0 so the toggle + avatar are NEVER what gets clipped/overflowed */}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               <button
                 onClick={() => setDark((d) => !d)}
                 style={{
@@ -423,6 +426,7 @@ ${historyLine}<br/>
                   border: "1px solid var(--border)", background: "var(--surface2)",
                   fontSize: 13, cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0,
                 }}
               >
                 {dark ? "☀️" : "🌙"}
@@ -602,7 +606,7 @@ ${historyLine}<br/>
             ))}
 
             {/* Account menu also lives here so it's reachable once the chat pane is hidden */}
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingRight: 6 }}>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, paddingRight: 6, flexShrink: 0 }}>
               {creditsRemaining !== null && (
                 <Link
                   href="/profile"
@@ -650,6 +654,15 @@ ${historyLine}<br/>
           </div>
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 480px) {
+          .vq-live-indicator { display: none; }
+        }
+        @media (max-width: 360px) {
+          .vq-chat-brand-text { display: none; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -116,7 +116,15 @@ function ProfilePageContent() {
   const tripsLeft = data ? Math.floor(data.credits / Math.max(1, data.creditsPerTrip)) : 0;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        height: "100dvh",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        background: "var(--bg)",
+      }}
+    >
       {/* Header */}
       <div
         style={{
@@ -191,6 +199,7 @@ function ProfilePageContent() {
           >⚡</div>
 
           <div
+            className="vq-profile-avatar"
             style={{
               width: 72,
               height: 72,
@@ -274,7 +283,7 @@ function ProfilePageContent() {
             <div style={{ height: 110 }} />
           ) : (
             <>
-              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+              <div className="vq-profile-credits-row" style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
                 <CreditRing pct={pct} />
 
                 <div style={{ flex: 1, minWidth: 160 }}>
@@ -492,6 +501,42 @@ function ProfilePageContent() {
           )}
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 640px) {
+          .vq-profile-container {
+            padding: 20px 14px 48px !important;
+            gap: 14px !important;
+          }
+          .vq-profile-identity {
+            padding: 18px !important;
+            gap: 14px !important;
+          }
+          .vq-profile-avatar {
+            width: 56px !important;
+            height: 56px !important;
+          }
+          .vq-profile-back-label {
+            display: none;
+          }
+          .vq-profile-stats {
+            grid-template-columns: 1fr !important;
+          }
+          .vq-profile-credits-row {
+            justify-content: center;
+            text-align: center;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .vq-profile-identity {
+            flex-direction: column;
+            text-align: center;
+          }
+        }
+      `}</style>
     </div>
   );
 }

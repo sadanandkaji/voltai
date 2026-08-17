@@ -335,92 +335,101 @@ gestureHandling: "cooperative",
         </div>
       )}
 
-      {/* Top bar — route summary only, no battery */}
+      {/* ═══════ TOP ROW — summary (left) + battery arcs (right), sharing the row so neither can grow into the other ═══════ */}
       {!loading && !error && (
-        <div className="absolute top-3 left-3 z-10 pointer-events-none">
-          <div className="flex items-center gap-2 rounded-full px-4 py-2"
+        <div className="absolute top-3 left-3 right-3 z-10 flex items-start justify-between gap-2 pointer-events-none">
+          {/* Route summary */}
+          <div className="flex items-center gap-2 rounded-full px-3 sm:px-4 py-2 min-w-0 pointer-events-auto"
             style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
-            <span className="font-syne font-bold text-sm text-green-500 truncate max-w-[120px]">{originCity}</span>
+            <span className="font-syne font-bold text-sm text-green-500 truncate max-w-[70px] sm:max-w-[120px]">{originCity}</span>
             <span className="text-xs flex-shrink-0" style={{ color: textMuted }}>→</span>
-            <span className="font-syne font-bold text-sm text-orange-400 truncate max-w-[120px]">{destCity}</span>
+            <span className="font-syne font-bold text-sm text-orange-400 truncate max-w-[70px] sm:max-w-[120px]">{destCity}</span>
             {routeData && (
               <>
-                <span style={{ color: textMuted, fontSize: 10 }}>·</span>
-                <span className="font-mono text-xs whitespace-nowrap" style={{ color: textSec }}>{routeData.distanceText}</span>
-                <span style={{ color: textMuted, fontSize: 10 }}>·</span>
-                <span className="font-mono text-xs whitespace-nowrap" style={{ color: textSec }}>{routeData.durationText}</span>
+                <span className="hidden sm:inline" style={{ color: textMuted, fontSize: 10 }}>·</span>
+                <span className="hidden sm:inline font-mono text-xs whitespace-nowrap" style={{ color: textSec }}>{routeData.distanceText}</span>
+                <span className="hidden sm:inline" style={{ color: textMuted, fontSize: 10 }}>·</span>
+                <span className="hidden sm:inline font-mono text-xs whitespace-nowrap" style={{ color: textSec }}>{routeData.durationText}</span>
               </>
             )}
+          </div>
+
+          {/* Battery arcs */}
+          <div className="flex items-center gap-1.5 sm:gap-2 rounded-2xl px-2 sm:px-3 py-2 flex-shrink-0 pointer-events-auto"
+            style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
+            <BatArc pct={batteryPercent} label="Start" color="#60a5fa" isDark={isDark} />
+            <span className="text-xs" style={{ color: textMuted }}>→</span>
+            <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} isDark={isDark} notFeasible={!willReach} />
           </div>
         </div>
       )}
 
-      {/* Battery arcs — top right */}
-      {!loading && !error && (
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-2xl px-3 py-2"
-          style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
-          <BatArc pct={batteryPercent} label="Start" color="#60a5fa" isDark={isDark} />
-          <span className="text-xs" style={{ color: textMuted }}>→</span>
-          <BatArc pct={Math.max(0, remainingBattery)} label="Arrive" color={willReach ? "#4ade80" : "#f87171"} isDark={isDark} notFeasible={!willReach} />
+      {/* On mobile, route distance/duration dropped from the top pill above — show it as a small caption under the pill instead, so nothing is lost */}
+      {!loading && !error && routeData && (
+        <div className="absolute z-10 sm:hidden pointer-events-none" style={{ top: 54, left: 12 }}>
+          <span className="font-mono text-[10px] rounded-full px-2 py-0.5" style={{ background: overlayBg, border: `1px solid ${overlayBorder}`, color: textSec }}>
+            {routeData.distanceText} · {routeData.durationText}
+          </span>
         </div>
       )}
 
-      {/* Legend — bottom left */}
+      {/* ═══════ BOTTOM ROW — legend (left, flexible) + Directions toggle (right, fixed) sharing one row so the legend can never run under the button ═══════ */}
       {!loading && !error && (
-        <div className="absolute bottom-3 left-3 z-10">
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2 flex-wrap"
-            style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-1.5 rounded-full bg-green-500" />
-              <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: textMuted }}>Route</span>
+        <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-2">
+          {/* Legend — flex-1 + min-w-0 lets it shrink/scroll instead of overflowing under the button */}
+          <div className="flex-1 min-w-0 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <div className="inline-flex items-center gap-2 sm:gap-3 rounded-xl px-3 py-2 whitespace-nowrap"
+              style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: textMuted }}>Route</span>
+              </div>
+              <span style={{ color: textMuted, fontSize: 10 }}>·</span>
+              <span className="text-xs">🚗</span>
+              <span className="font-mono text-[10px]" style={{ color: textMuted }}>Start</span>
+              <span className="text-xs">🏁</span>
+              <span className="font-mono text-[10px]" style={{ color: textMuted }}>End</span>
+
+              {chargingStations.length > 0 && (
+                <>
+                  <div className="w-px h-3 flex-shrink-0" style={{ background: "rgba(34,197,94,0.2)" }} />
+                  {chargingStations.filter(s => s.isCritical).length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" />
+                      <span className="font-mono text-[10px] font-bold text-red-400">
+                        {chargingStations.filter(s => s.isCritical).length} Must Stop
+                      </span>
+                    </div>
+                  )}
+                  {chargingStations.filter(s => s.isNeeded && !s.isCritical).length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span className="font-mono text-[10px] font-bold text-amber-400">
+                        {chargingStations.filter(s => s.isNeeded && !s.isCritical).length} Recommended
+                      </span>
+                    </div>
+                  )}
+                  {chargingStations.filter(s => !s.isNeeded).length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
+                      <span className="font-mono text-[10px] text-blue-400">
+                        {chargingStations.filter(s => !s.isNeeded).length} Nearby
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            <span style={{ color: textMuted, fontSize: 10 }}>·</span>
-            <span className="text-xs">🚗</span>
-            <span className="font-mono text-[10px]" style={{ color: textMuted }}>Start</span>
-            <span className="text-xs">🏁</span>
-            <span className="font-mono text-[10px]" style={{ color: textMuted }}>End</span>
-
-            {chargingStations.length > 0 && (
-              <>
-                <div className="w-px h-3" style={{ background: "rgba(34,197,94,0.2)" }} />
-                {chargingStations.filter(s => s.isCritical).length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                    <span className="font-mono text-[10px] font-bold text-red-400">
-                      {chargingStations.filter(s => s.isCritical).length} Must Stop
-                    </span>
-                  </div>
-                )}
-                {chargingStations.filter(s => s.isNeeded && !s.isCritical).length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                    <span className="font-mono text-[10px] font-bold text-amber-400">
-                      {chargingStations.filter(s => s.isNeeded && !s.isCritical).length} Recommended
-                    </span>
-                  </div>
-                )}
-                {chargingStations.filter(s => !s.isNeeded).length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
-                    <span className="font-mono text-[10px] text-blue-400">
-                      {chargingStations.filter(s => !s.isNeeded).length} Nearby
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
           </div>
-        </div>
-      )}
 
-      {/* Directions toggle — bottom right */}
-      {!loading && !error && routeData && routeData.steps.length > 0 && (
-        <div className="absolute bottom-3 right-3 z-10">
-          <button onClick={() => setShowSteps(v => !v)}
-            className="rounded-xl px-4 py-2 font-mono text-xs text-green-500 cursor-pointer"
-            style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
-            {showSteps ? "Hide ▲" : "Directions ▼"}
-          </button>
+          {/* Directions toggle — flex-shrink-0 keeps it fixed-size and always fully visible */}
+          {routeData && routeData.steps.length > 0 && (
+            <button onClick={() => setShowSteps(v => !v)}
+              className="flex-shrink-0 rounded-xl px-3 sm:px-4 py-2 font-mono text-xs text-green-500 cursor-pointer whitespace-nowrap"
+              style={{ background: overlayBg, backdropFilter: "blur(14px)", border: `1px solid ${overlayBorder}` }}>
+              {showSteps ? "Hide ▲" : "Directions ▼"}
+            </button>
+          )}
         </div>
       )}
 

@@ -98,27 +98,43 @@ function ChargerPin({ x, y, angle = 0 }: { x: number; y: number; angle?: number 
 
 // Simple side-profile car, drawn with the road at local y = 0 (wheel
 // bottoms rest on it) and the body rising in -y, facing +x by default.
+// Simple top-down car icon: nose points along +x by default (matches the
+// existing rotation logic in DesktopScene/MobileScene, which assumes
+// angle 0 = facing +x). Body centered at local origin so rotation looks
+// natural mid-turn instead of pivoting around a wheel.
 function CarMarker() {
   return (
     <g>
-      <ellipse cx="0" cy="0.5" rx="19" ry="2" fill="#000" opacity="0.16" />
-      <path
-        d="M-20 -8 C-20 -13 -17 -14 -14 -15 L-11 -21 C-10 -23 -8 -24 -5 -24 L7 -24 C10 -24 12 -23 13 -21 L16 -15 C19 -14 20 -13 20 -8 L20 -7 C20 -5.5 19 -5 17.5 -5 L-17.5 -5 C-19 -5 -20 -5.5 -20 -7 Z"
+      {/* soft ground shadow */}
+      <ellipse cx="0" cy="0" rx="22" ry="11" fill="#000" opacity="0.16" />
+
+      {/* body */}
+      <rect
+        x="-21" y="-9" width="42" height="18" rx="6.5"
         fill="var(--green)"
         stroke="#04140a"
-        strokeWidth={1}
+        strokeWidth={1.2}
       />
-      <path
-        d="M-9 -21 C-8.5 -22.5 -7.5 -23 -5 -23 L6 -23 C8 -23 9.5 -22 10.5 -20.3 L12 -16 L-11 -16 Z"
-        fill="#04140a"
-        opacity={0.9}
-      />
-      <line x1="0" y1="-23" x2="0" y2="-16" stroke="var(--green)" strokeWidth={0.8} opacity={0.5} />
-      <circle cx="18.5" cy="-10" r="1.6" fill="#fff" opacity={0.9} />
-      <circle cx="-11" cy="-4.5" r="4.5" fill="#04140a" stroke="var(--green)" strokeWidth={1.4} />
-      <circle cx="11" cy="-4.5" r="4.5" fill="#04140a" stroke="var(--green)" strokeWidth={1.4} />
-      <circle cx="-11" cy="-4.5" r="1.6" fill="var(--green)" />
-      <circle cx="11" cy="-4.5" r="1.6" fill="var(--green)" />
+
+      {/* windshield (front) */}
+      <rect x="5" y="-6.5" width="9" height="13" rx="2.2" fill="#04140a" opacity="0.85" />
+      {/* rear window */}
+      <rect x="-15" y="-6" width="7" height="12" rx="2" fill="#04140a" opacity="0.55" />
+      {/* roof */}
+      <rect x="-6.5" y="-5.5" width="11.5" height="11" rx="2.4" fill="#04140a" opacity="0.22" />
+
+      {/* headlights */}
+      <circle cx="20.5" cy="-5" r="1.4" fill="#fff" opacity="0.95" />
+      <circle cx="20.5" cy="5" r="1.4" fill="#fff" opacity="0.95" />
+      {/* taillights */}
+      <circle cx="-20.5" cy="-5" r="1.1" fill="#f87171" opacity="0.9" />
+      <circle cx="-20.5" cy="5" r="1.1" fill="#f87171" opacity="0.9" />
+
+      {/* wheels */}
+      <rect x="-14.5" y="-11.5" width="7" height="3" rx="1.3" fill="#04140a" />
+      <rect x="-14.5" y="8.5" width="7" height="3" rx="1.3" fill="#04140a" />
+      <rect x="7.5" y="-11.5" width="7" height="3" rx="1.3" fill="#04140a" />
+      <rect x="7.5" y="8.5" width="7" height="3" rx="1.3" fill="#04140a" />
     </g>
   );
 }
