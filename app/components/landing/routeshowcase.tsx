@@ -1,19 +1,18 @@
 // app/components/landing/RouteShowcase.tsx
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion, type Variants, type Easing } from "framer-motion";
 
 type Charger = {
   id: string;
-  x: number; // 0–100, position along the route (%)
-  y: number; // px offset from the route line (+/- wobble)
   label: string;
 };
 
 const CHARGERS: Charger[] = [
-  { id: "c1", x: 18, y: -22, label: "Supercharger · 6 stalls" },
-  { id: "c2", x: 46, y: 20, label: "Level 3 · 4 stalls" },
-  { id: "c3", x: 74, y: -18, label: "Supercharger · 8 stalls" },
+  { id: "c1", label: "Supercharger · 6 stalls" },
+  { id: "c2", label: "Level 3 · 4 stalls" },
+  { id: "c3", label: "Supercharger · 8 stalls" },
 ];
 
 const EASE_OUT: Easing = [0.16, 1, 0.3, 1];
@@ -29,35 +28,58 @@ const pin: Variants = {
 };
 
 // entrance animation for the pin glyph itself (kept separate from the
-// static positional/flip transform on its wrapping <g>, since framer-motion
-// owns the "transform" attribute on motion elements it animates)
+// static positional/rotation transform on its wrapping <g>, since
+// framer-motion owns the "transform" attribute on elements it animates)
 const pinGlyph: Variants = {
   hidden: { opacity: 0, scale: 0.6 },
   show: { opacity: 1, scale: 1, transition: { duration: 0.35, ease: EASE_OUT } },
 };
 
-const SVG_WIDTH = 640;
-const SVG_HEIGHT = 160;
-const ROUTE_Y = SVG_HEIGHT / 2;
 const PIN_SCALE = 0.62;
 
-function chargerPoint(x: number, y: number) {
-  return {
-    cx: (x / 100) * SVG_WIDTH,
-    cy: ROUTE_Y + y,
-  };
+type Point = { x: number; y: number };
+
+function segmentLengths(points: Point[]) {
+  const lens: number[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    lens.push(Math.sqrt(dx * dx + dy * dy));
+  }
+  return lens;
 }
 
-// Map-pin marker, drawn tip-first at local (0,0) with the rounded head
-// above it. The wrapping <g> flips it vertically when the charger sits
-// below the route line, so the tip always touches the stub line's end
-// and the head always points away from the road.
-function ChargerPin({ x, y }: { x: number; y: number }) {
-  const isBelow = y > ROUTE_Y;
-  const flip = isBelow ? -PIN_SCALE : PIN_SCALE;
+// proportional keyframe times (0..1) so the car moves at roughly constant
+// speed across unevenly-sized zigzag segments
+function polylineTimes(points: Point[]) {
+  const lens = segmentLengths(points);
+  const total = lens.reduce((a, b) => a + b, 0);
+  const times = [0];
+  let acc = 0;
+  for (const l of lens) {
+    acc += l;
+    times.push(acc / total);
+  }
+  return times;
+}
 
+// heading (degrees) of each segment, so the car can bank through turns
+function segmentAngles(points: Point[]) {
+  const angles: number[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    angles.push((Math.atan2(dy, dx) * 180) / Math.PI);
+  }
+  return angles;
+}
+
+// Map-pin marker: tip at local (0,0), rounded head above it. `angle`
+// rotates the whole glyph (0 = head points up, 90 = right, 180 = down,
+// 270 = left) so it can branch off a route running in any direction.
+function ChargerPin({ x, y, angle = 0 }: { x: number; y: number; angle?: number }) {
   return (
-    <g transform={`translate(${x} ${y}) scale(${PIN_SCALE} ${flip})`}>
+    <g transform={`translate(${x} ${y}) rotate(${angle}) scale(${PIN_SCALE})`}>
       <motion.g variants={pinGlyph}>
         <path
           d="M0,0 C-10,-14 -14,-20 -14,-28 A14,14 0 1 1 14,-28 C14,-20 10,-14 0,0 Z"
@@ -76,8 +98,7 @@ function ChargerPin({ x, y }: { x: number; y: number }) {
 }
 
 // Simple side-profile car, drawn with the road at local y = 0 (wheel
-// bottoms rest on it) and the body rising in -y. Headlight sits on the
-// right so it reads as driving in the direction of travel.
+// bottoms rest on it) and the body rising in -y, facing +x by default.
 function CarMarker() {
   return (
     <g>
@@ -103,97 +124,202 @@ function CarMarker() {
   );
 }
 
-export default function RouteShowcase() {
+// ---------- Desktop: straight horizontal route ----------
+
+const DESKTOP_W = 640;
+const DESKTOP_H = 160;
+const DESKTOP_ROUTE_Y = DESKTOP_H / 2;
+const DESKTOP_CHARGERS = [
+  { x: 18, y: -22 },
+  { x: 46, y: 20 },
+  { x: 74, y: -18 },
+];
+
+function DesktopScene() {
   return (
-    <motion.div
-      variants={container}
-      initial="hidden"
-      animate="show"
-      style={styles.wrap}
-    >
+    <svg viewBox={`0 0 ${DESKTOP_W} ${DESKTOP_H}`} width="100%" height="auto" style={styles.svg}>
+      <line
+        x1={0}
+        y1={DESKTOP_ROUTE_Y}
+        x2={DESKTOP_W}
+        y2={DESKTOP_ROUTE_Y}
+        stroke="var(--border)"
+        strokeWidth={3}
+        strokeLinecap="round"
+      />
+      <motion.line
+        x1={0}
+        y1={DESKTOP_ROUTE_Y}
+        x2={DESKTOP_W}
+        y2={DESKTOP_ROUTE_Y}
+        stroke="var(--green)"
+        strokeWidth={3}
+        strokeLinecap="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 1.6, ease: EASE_OUT, delay: 0.1 }}
+      />
+
+      <circle cx={0} cy={DESKTOP_ROUTE_Y} r={7} fill="var(--green)" />
+      <circle cx={DESKTOP_W} cy={DESKTOP_ROUTE_Y} r={7} fill="var(--surface)" stroke="var(--green)" strokeWidth={2.5} />
+
+      {DESKTOP_CHARGERS.map((c, i) => {
+        const cx = (c.x / 100) * DESKTOP_W;
+        const cy = DESKTOP_ROUTE_Y + c.y;
+        const isBelow = c.y > 0;
+        return (
+          <g key={i}>
+            <motion.line x1={cx} y1={DESKTOP_ROUTE_Y} x2={cx} y2={cy} stroke="var(--border)" strokeWidth={1.5} variants={pin} />
+            <ChargerPin x={cx} y={cy} angle={isBelow ? 180 : 0} />
+          </g>
+        );
+      })}
+
+      <motion.g
+        initial={{ x: 0, y: DESKTOP_ROUTE_Y }}
+        animate={{ x: DESKTOP_W, y: DESKTOP_ROUTE_Y }}
+        transition={{ duration: 5.5, ease: "linear", repeat: Infinity, repeatDelay: 0.8 }}
+      >
+        <CarMarker />
+      </motion.g>
+    </svg>
+  );
+}
+
+// ---------- Mobile: vertical zigzag route, wide-to-zoom intro ----------
+
+const MOBILE_W = 300;
+const MOBILE_H = 560;
+const MOBILE_POINTS: Point[] = [
+  { x: 150, y: 20 },
+  { x: 86, y: 150 },
+  { x: 214, y: 290 },
+  { x: 86, y: 430 },
+  { x: 150, y: 540 },
+];
+const MOBILE_PATH_D = MOBILE_POINTS.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+const MOBILE_TIMES = polylineTimes(MOBILE_POINTS);
+const MOBILE_SEG_ANGLES = segmentAngles(MOBILE_POINTS);
+const MOBILE_ROTATIONS = [
+  MOBILE_SEG_ANGLES[0],
+  MOBILE_SEG_ANGLES[0],
+  MOBILE_SEG_ANGLES[1],
+  MOBILE_SEG_ANGLES[2],
+  MOBILE_SEG_ANGLES[3],
+];
+
+// interior vertices branch a stub + pin out to whichever side they sit on
+const MOBILE_CHARGERS = [
+  { anchor: MOBILE_POINTS[1], side: "left" as const },
+  { anchor: MOBILE_POINTS[2], side: "right" as const },
+  { anchor: MOBILE_POINTS[3], side: "left" as const },
+];
+const STUB_LEN = 34;
+
+const zoomIn: Variants = {
+  hidden: { scale: 0.78 },
+  show: { scale: 1, transition: { duration: 1.1, ease: EASE_OUT } },
+};
+
+function MobileScene() {
+  return (
+    <svg viewBox={`0 0 ${MOBILE_W} ${MOBILE_H}`} width="100%" height="auto" style={styles.svgMobile}>
+      <motion.g variants={zoomIn} style={{ transformOrigin: `${MOBILE_W / 2}px ${MOBILE_H / 2}px` }}>
+        <path
+          d={MOBILE_PATH_D}
+          fill="none"
+          stroke="var(--border)"
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <motion.path
+          d={MOBILE_PATH_D}
+          fill="none"
+          stroke="var(--green)"
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1.8, ease: EASE_OUT, delay: 0.15 }}
+        />
+
+        <circle cx={MOBILE_POINTS[0].x} cy={MOBILE_POINTS[0].y} r={7} fill="var(--green)" />
+        <circle
+          cx={MOBILE_POINTS[MOBILE_POINTS.length - 1].x}
+          cy={MOBILE_POINTS[MOBILE_POINTS.length - 1].y}
+          r={7}
+          fill="var(--surface)"
+          stroke="var(--green)"
+          strokeWidth={2.5}
+        />
+
+        {MOBILE_CHARGERS.map((c, i) => {
+          const dir = c.side === "left" ? -1 : 1;
+          const px = c.anchor.x + dir * STUB_LEN;
+          return (
+            <g key={i}>
+              <motion.line
+                x1={c.anchor.x}
+                y1={c.anchor.y}
+                x2={px}
+                y2={c.anchor.y}
+                stroke="var(--border)"
+                strokeWidth={1.5}
+                variants={pin}
+              />
+              <ChargerPin x={px} y={c.anchor.y} angle={c.side === "left" ? 270 : 90} />
+            </g>
+          );
+        })}
+
+        <motion.g
+          initial={{ x: MOBILE_POINTS[0].x, y: MOBILE_POINTS[0].y, rotate: MOBILE_ROTATIONS[0] }}
+          animate={{
+            x: MOBILE_POINTS.map((p) => p.x),
+            y: MOBILE_POINTS.map((p) => p.y),
+            rotate: MOBILE_ROTATIONS,
+          }}
+          transition={{
+            duration: 6.5,
+            ease: "linear",
+            times: MOBILE_TIMES,
+            repeat: Infinity,
+            repeatDelay: 0.8,
+          }}
+        >
+          <CarMarker />
+        </motion.g>
+      </motion.g>
+    </svg>
+  );
+}
+
+// ---------- Shared shell ----------
+
+export default function RouteShowcase() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  return (
+    <motion.div variants={container} initial="hidden" animate="show" style={styles.wrap}>
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <span style={styles.routeLabel}>San Francisco → Los Angeles</span>
           <span style={styles.rangeBadge}>62% battery at arrival</span>
         </div>
 
-        <svg
-          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-          width="100%"
-          height="auto"
-          style={styles.svg}
-        >
-          {/* base route line */}
-          <line
-            x1={0}
-            y1={ROUTE_Y}
-            x2={SVG_WIDTH}
-            y2={ROUTE_Y}
-            stroke="var(--border)"
-            strokeWidth={3}
-            strokeLinecap="round"
-          />
-
-          {/* animated draw-on route line */}
-          <motion.line
-            x1={0}
-            y1={ROUTE_Y}
-            x2={SVG_WIDTH}
-            y2={ROUTE_Y}
-            stroke="var(--green)"
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeDasharray="0 1"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 1.6, ease: EASE_OUT, delay: 0.1 }}
-          />
-
-          {/* start marker */}
-          <circle cx={0} cy={ROUTE_Y} r={7} fill="var(--green)" />
-          {/* end marker */}
-          <circle
-            cx={SVG_WIDTH}
-            cy={ROUTE_Y}
-            r={7}
-            fill="var(--surface)"
-            stroke="var(--green)"
-            strokeWidth={2.5}
-          />
-
-          {/* charger stub lines + pins */}
-          {CHARGERS.map((c) => {
-            const { cx, cy } = chargerPoint(c.x, c.y);
-            return (
-              <g key={c.id}>
-                <motion.line
-                  x1={cx}
-                  y1={ROUTE_Y}
-                  x2={cx}
-                  y2={cy}
-                  stroke="var(--border)"
-                  strokeWidth={1.5}
-                  variants={pin}
-                />
-                <ChargerPin x={cx} y={cy} />
-              </g>
-            );
-          })}
-
-          {/* moving vehicle marker */}
-          <motion.g
-            initial={{ x: 0, y: ROUTE_Y }}
-            animate={{ x: SVG_WIDTH, y: ROUTE_Y }}
-            transition={{
-              duration: 5.5,
-              ease: "linear",
-              repeat: Infinity,
-              repeatDelay: 0.8,
-            }}
-          >
-            <CarMarker />
-          </motion.g>
-        </svg>
+        <div style={isMobile ? styles.svgFrameMobile : undefined}>
+          {isMobile ? <MobileScene /> : <DesktopScene />}
+        </div>
 
         <motion.div variants={container} style={styles.chargerList}>
           {CHARGERS.map((c) => (
@@ -244,6 +370,14 @@ const styles: Record<string, React.CSSProperties> = {
   svg: {
     display: "block",
     overflow: "visible",
+  },
+  svgMobile: {
+    display: "block",
+    overflow: "visible",
+  },
+  svgFrameMobile: {
+    maxWidth: 260,
+    margin: "0 auto",
   },
   chargerList: {
     display: "flex",
