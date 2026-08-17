@@ -203,6 +203,8 @@ function DesktopScene() {
 
 // ---------- Mobile: vertical zigzag route, wide-to-zoom intro ----------
 
+// ---------- Mobile: vertical zigzag route, wide-to-zoom intro ----------
+
 const MOBILE_W = 300;
 const MOBILE_H = 560;
 const MOBILE_POINTS: Point[] = [
@@ -215,13 +217,27 @@ const MOBILE_POINTS: Point[] = [
 const MOBILE_PATH_D = MOBILE_POINTS.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
 const MOBILE_TIMES = polylineTimes(MOBILE_POINTS);
 const MOBILE_SEG_ANGLES = segmentAngles(MOBILE_POINTS);
-const MOBILE_ROTATIONS = [
-  MOBILE_SEG_ANGLES[0],
-  MOBILE_SEG_ANGLES[0],
-  MOBILE_SEG_ANGLES[1],
-  MOBILE_SEG_ANGLES[2],
-  MOBILE_SEG_ANGLES[3],
-];
+
+// Instant rotation: hold segment angle during travel, snap at vertices
+const MOBILE_ROTATE_TIMES: number[] = [];
+const MOBILE_ROTATE_VALUES: number[] = [];
+
+for (let i = 0; i < MOBILE_POINTS.length; i++) {
+  const t = MOBILE_TIMES[i];
+  const angle =
+    i < MOBILE_SEG_ANGLES.length
+      ? MOBILE_SEG_ANGLES[i]
+      : MOBILE_SEG_ANGLES[MOBILE_SEG_ANGLES.length - 1];
+
+  if (i > 0) {
+    // Hold previous angle until just before this point
+    MOBILE_ROTATE_TIMES.push(t - 0.0001);
+    MOBILE_ROTATE_VALUES.push(MOBILE_SEG_ANGLES[i - 1]);
+  }
+
+  MOBILE_ROTATE_TIMES.push(t);
+  MOBILE_ROTATE_VALUES.push(angle);
+}
 
 // interior vertices branch a stub + pin out to whichever side they sit on
 const MOBILE_CHARGERS = [
@@ -290,11 +306,11 @@ function MobileScene() {
         })}
 
         <motion.g
-          initial={{ x: MOBILE_POINTS[0].x, y: MOBILE_POINTS[0].y, rotate: MOBILE_ROTATIONS[0] }}
+          initial={{ x: MOBILE_POINTS[0].x, y: MOBILE_POINTS[0].y, rotate: MOBILE_ROTATE_VALUES[0] }}
           animate={{
             x: MOBILE_POINTS.map((p) => p.x),
             y: MOBILE_POINTS.map((p) => p.y),
-            rotate: MOBILE_ROTATIONS,
+            rotate: MOBILE_ROTATE_VALUES,
           }}
           transition={{
             duration: 6.5,
@@ -302,6 +318,11 @@ function MobileScene() {
             times: MOBILE_TIMES,
             repeat: Infinity,
             repeatDelay: 0.8,
+            rotate: {
+              duration: 6.5,
+              times: MOBILE_ROTATE_TIMES,
+              ease: "linear",
+            },
           }}
         >
           <CarMarker />

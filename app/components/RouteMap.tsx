@@ -199,7 +199,7 @@ if (window.google?.maps?.Map) { setSdkReady(true); return; }
 zoomControlOptions: {
   position: 3, // ControlPosition.TOP_RIGHT = 3, avoids enum timing issue
 },
-gestureHandling: "cooperative",
+gestureHandling: (typeof window !== "undefined" && window.innerWidth < 768) ? "greedy" : "cooperative",
 });
   }, [sdkReady, origin, destination, isDark]);
 
